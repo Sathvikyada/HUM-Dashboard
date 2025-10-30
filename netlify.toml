@@ -1,0 +1,15 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# Scheduled function to sync from Google Sheets every 15 minutes
+[[scheduled.functions]]
+  name = "sync-from-sheets"
+  cron = "*/15 * * * *"
+
