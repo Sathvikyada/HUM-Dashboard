@@ -60,9 +60,16 @@ export const handler: Handler = async (event) => {
     for (const row of rows) {
       const email = row['Email'] || row['email'];
       if (!email) continue;
-      const full_name = row['Full Name'] || row['Name'] || '';
-      const university = row['University'] || '';
-      const graduation_year = row['Graduation Year'] || row['Grad Year'] || '';
+      
+      // Combine first and last name if separated
+      const first_name = row['First Name'];
+      const last_name = row['Last Name'];
+      const full_name = first_name && last_name 
+        ? `${first_name} ${last_name}`.trim()
+        : row['Full Name'] || row['Name'] || '';
+      
+      const university = row['University/ College'] || '';
+      const graduation_year = row['Graduation Year'];
       const responses = row;
 
       const { error } = await supabaseAdmin

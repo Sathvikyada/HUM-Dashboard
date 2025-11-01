@@ -9,38 +9,7 @@ export function Scanner() {
   const [error, setError] = React.useState<string>('');
   const readerRef = React.useRef<BrowserMultiFormatReader | null>(null);
 
-  React.useEffect(() => {
-    const reader = new BrowserMultiFormatReader();
-    readerRef.current = reader;
-    let stopped = false;
-    (async () => {
-      try {
-        const devices = await BrowserMultiFormatReader.listVideoInputDevices();
-        const deviceId = devices[0]?.deviceId;
-        const controls = await reader.decodeFromVideoDevice(deviceId, videoRef.current!, async (result, err) => {
-          if (stopped) return;
-          if (result) {
-            stopped = true; // pause on result
-            const text = result.getText();
-            try {
-              const payload = JSON.parse(text);
-              const token = payload.t || payload.token || text;
-              await handleCheckIn(token);
-            } catch {
-              await handleCheckIn(text);
-            }
-            setTimeout(() => { stopped = false; }, 1200);
-          }
-        });
-        return () => controls?.stop();
-      } catch (e: any) {
-        setError(e?.message || 'Camera error');
-      }
-    })();
-    return () => { readerRef.current?.reset(); };
-  }, []);
-
-  async function handleCheckIn(token: string) {
+  const handleCheckIn = React.useCallback(async (token: string) => {
     setStatus('Checking in…');
     setError('');
     try {
@@ -58,7 +27,43 @@ export function Scanner() {
       setError(e?.message || 'Network error');
       setStatus('Error');
     }
-  }
+  }, []);
+
+  React.useEffect(() => {
+    const reader = new BrowserMultiFormatReader();
+    readerRef.current = reader;
+    let stopped = false;
+    let controls: any = null;
+    (async () => {
+      try {
+        const devices = await BrowserMultiFormatReader.listVideoInputDevices();
+        const deviceId = devices[0]?.deviceId;
+        controls = await reader.decodeFromVideoDevice(deviceId, videoRef.current!, async (result, err) => {
+          if (stopped) return;
+          if (result) {
+            stopped = true; // pause on result
+            const text = result.getText();
+            try {
+              const payload = JSON.parse(text);
+              const token = payload.t || payload.token || text;
+              await handleCheckIn(token);
+            } catch {
+              await handleCheckIn(text);
+            }
+            setTimeout(() => { stopped = false; }, 1200);
+          }
+        });
+      } catch (e: any) {
+        setError(e?.message || 'Camera error');
+      }
+    })();
+    return () => { 
+      if (controls) controls.stop();
+      if (reader) {
+        try { (reader as any).stopAsyncDecode?.(); } catch {}
+      }
+    };
+  }, [handleCheckIn]);
 
   return (
     <div>

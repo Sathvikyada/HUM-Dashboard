@@ -1,13 +1,32 @@
 import QRCode from 'qrcode';
+import crypto from 'crypto';
 
+// Generate QR code as PNG buffer (for attachment)
+export async function generateQrBuffer(text: string): Promise<Buffer> {
+  return QRCode.toBuffer(text, {
+    errorCorrectionLevel: 'M',
+    margin: 1,
+    scale: 5,
+    type: 'png',
+  });
+}
+
+// Optional Data URL generator (for testing/debug)
 export async function generateQrDataUrl(text: string): Promise<string> {
-  return QRCode.toDataURL(text, { errorCorrectionLevel: 'M', margin: 1, scale: 6 });
+  try {
+    return await QRCode.toDataURL(text, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      scale: 5,
+    });
+  } catch (err) {
+    console.error('QR toDataURL failed, using buffer fallback:', err);
+    const qrBuffer = await generateQrBuffer(text);
+    return `data:image/png;base64,${qrBuffer.toString('base64')}`;
+  }
 }
 
+// Generate short random token (16 hex chars = 64 bits entropy)
 export function generateQrToken(): string {
-  const random = crypto.getRandomValues(new Uint32Array(4));
-  const hex = Array.from(random).map(n => n.toString(16).padStart(8, '0')).join('');
-  // shorter token for readability, still sufficiently random (~64 bits)
-  return hex.slice(0, 16);
+  return crypto.randomBytes(8).toString('hex');
 }
-
