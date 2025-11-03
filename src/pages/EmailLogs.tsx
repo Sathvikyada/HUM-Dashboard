@@ -29,8 +29,15 @@ export function EmailLogs() {
       const res = await fetch(url.toString().replace(window.location.origin, ''), {
         headers: { Authorization: `Bearer ${adminToken}` },
       });
+      if (!res.ok) {
+        const error = await res.json();
+        console.error('Failed to load email logs:', error);
+        return;
+      }
       const data = await res.json();
       setLogs(data.logs || []);
+    } catch (error) {
+      console.error('Error loading email logs:', error);
     } finally {
       setLoading(false);
     }

@@ -52,17 +52,11 @@ export async function sendDecisionEmail(params: {
     subject: subjectMap[params.decision],
     html,
     text,
-    mailSettings: { sandbox_mode: { enable: false } },
     trackingSettings: {
       clickTracking: { enable: false },
       openTracking: { enable: false },
     },
     headers: { 'X-Entity-Ref-ID': params.decision + '-' + Date.now() },
-    // customArgs: [
-    //   { custom_arg_1: params.to },
-    //   { custom_arg_2: params.decision },
-    //   { custom_arg_3: 'XIII' },
-    // ],
   };
 
   if (params.qrBuffer && params.decision === 'accepted') {
@@ -137,9 +131,6 @@ function renderTemplate({
           <tr>
             <td style="padding:0 40px 30px;">
               ${copy(decision, escapedName)}
-              <p style="margin:20px 0 0;font-size:14px;color:#666;">
-                For any questions, contact <a href="mailto:team@hackumass.com" style="color:#4CAF50;">team@hackumass.com</a>.
-              </p>
             </td>
           </tr>
 
@@ -174,12 +165,12 @@ function renderTemplate({
 
 function copy(decision: Decision, name: string): string {
   if (decision === 'accepted') {
-    return `<p style="margin:0 0 20px;font-size:16px;color:#333;">Hi ${name},<br><br>Congratulations! You’ve been <strong>accepted</strong> to participate in HackUMass XIII 🎉</p>`;
+    return `<p style="margin:0 0 20px;font-size:16px;color:#333;">Hi ${name},<br><br>Congratulations! You've been accepted to participate in HackUMass XIII.<br><br>The event is from November 7th to 9th, 2025 at the Integrative Learning Center (ILC). In order to participate, make sure you join our Discord! There, you will find more information about the event. Discord: <a href="https://discord.gg/bATf3zC2" style="color:#4CAF50;">https://discord.gg/bATf3zC2</a><br><br>If you have any questions please visit our website at <a href="https://hackumass.com/" style="color:#4CAF50;">https://hackumass.com/</a>. If you cannot find your answer on our website, then please feel free to shoot us an email at <a href="mailto:team@hackumass.com" style="color:#4CAF50;">team@hackumass.com</a><br><br>Thanks again for registering for our event, and we look forward to seeing you there!</p>`;
   }
   if (decision === 'waitlisted') {
     return `<p style="margin:0 0 20px;font-size:16px;color:#333;">Hi ${name},<br><br>Thank you for applying to HackUMass XIII. You have been placed on the waitlist. We will notify you if a spot opens.</p>`;
   }
-  return `<p style="margin:0 0 20px;font-size:16px;color:#333;">Hi ${name},<br><br>Thank you for applying. Unfortunately, we are not able to offer you a spot this time.</p>`;
+  return `<p style="margin:0 0 20px;font-size:16px;color:#333;">Hi ${name},<br><br>Thanks for applying to HackUMass. Unfortunately we don't have enough room to accommodate everyone who wants to participate and we've had to reject your application. We hope that you'll continue your enthusiasm for hacking and apply to other awesome hackathons (you can find a list at <a href="https://mlh.io/seasons/2026/events" style="color:#4CAF50;">https://mlh.io/seasons/2026/events</a>).<br><br>Thanks again for applying to HackUMass, and we hope that you'll apply again next year.</p>`;
 }
 
 function renderText(params: { name: string; decision: Decision }): string {
@@ -188,6 +179,12 @@ function renderText(params: { name: string; decision: Decision }): string {
     return `Hi ${name},
 
 Congratulations! You've been accepted to participate in HackUMass XIII.
+
+The event is from November 7th to 9th, 2025 at the Integrative Learning Center (ILC). In order to participate, make sure you join our Discord! There, you will find more information about the event. Discord: https://discord.gg/bATf3zC2
+
+If you have any questions please visit our website at https://hackumass.com/. If you cannot find your answer on our website, then please feel free to shoot us an email at team@hackumass.com
+
+Thanks again for registering for our event, and we look forward to seeing you there!
 
 Your check-in QR code is attached to this email.
 
@@ -205,9 +202,10 @@ team@hackumass.com`;
   } else {
     return `Hi ${name},
 
-Thank you for applying to HackUMass XIII. Unfortunately, we cannot offer you a spot this time.
+Thanks for applying to HackUMass. Unfortunately we don't have enough room to accommodate everyone who wants to participate and we've had to reject your application. We hope that you'll continue your enthusiasm for hacking and apply to other awesome hackathons (you can find a list at https://mlh.io/seasons/2026/events).
 
-- HackUMass Team
-team@hackumass.com`;
+Thanks again for applying to HackUMass, and we hope that you'll apply again next year,
+
+The HackUMass Team`;
   }
 }

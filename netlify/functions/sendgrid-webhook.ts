@@ -43,19 +43,22 @@ export const handler: Handler = async (event) => {
           applicantId = applicants[0].id;
         }
 
-        // Insert log
+        // Insert log (upsert to prevent duplicates on sg_event_id)
         const { error: insertError } = await supabaseAdmin
           .from('email_logs')
-          .insert({
-            event_type: eventType,
-            applicant_id: applicantId,
-            applicant_email: email,
-            subject: webhookEvent.subject || null,
-            sg_message_id: sg_message_id || null,
-            sg_event_id: sg_event_id || null,
-            reason: reason || null,
-            raw_event: webhookEvent,
-          });
+          .upsert(
+            {
+              event_type: eventType,
+              applicant_id: applicantId,
+              applicant_email: email,
+              subject: webhookEvent.subject || null,
+              sg_message_id: sg_message_id || null,
+              sg_event_id: sg_event_id || null,
+              reason: reason || null,
+              raw_event: webhookEvent,
+            },
+            { onConflict: 'sg_event_id' }
+          );
 
         if (insertError) {
           console.error(`❌ Error logging event ${sg_event_id}:`, insertError.message);
