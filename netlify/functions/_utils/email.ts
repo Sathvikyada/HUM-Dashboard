@@ -1,6 +1,6 @@
 import sgMail from '@sendgrid/mail';
 
-const sendgridApiKey = process.env.SENDGRID_API_KEY as string;
+const sendgridApiKey = process.env.SG_API_KEY as string;
 const emailFrom = process.env.EMAIL_FROM as string;
 const emailLogoUrl = process.env.EMAIL_LOGO_URL as string;
 const adminEmail = process.env.ADMIN_EMAIL || 'hackumass-logs@hackumass.com';
