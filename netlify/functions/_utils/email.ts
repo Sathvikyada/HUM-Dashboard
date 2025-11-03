@@ -129,7 +129,7 @@ function renderTemplate({
 
           <!-- Message -->
           <tr>
-            <td style="padding:0 40px 30px;">
+            <td style="padding:40px 40px 30px;">
               ${copy(decision, escapedName)}
             </td>
           </tr>
