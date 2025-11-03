@@ -165,7 +165,7 @@ function renderTemplate({
 
 function copy(decision: Decision, name: string): string {
   if (decision === 'accepted') {
-    return `<p style="margin:0 0 20px;font-size:16px;color:#333;">Hey ${name},<br><br><br>Congratulations! You've been accepted to participate in HackUMass.<br><br><br>The check-in and opening ceremony will begin at 6:30 PM at the Campus Center Auditorium (1 Campus Center Way, Amherst, MA 01002). The event is from November 7th to 9th, 2025 at the Integrative Learning Center (ILC).<br><br><br>In order to participate, make sure you join our Discord (<a href="https://discord.gg/bATf3zC2" style="color:#4CAF50;">https://discord.gg/bATf3zC2</a>)! There, you will find more information about the event. If you have any questions please visit our website at <a href="https://hackumass.com/" style="color:#4CAF50;">https://hackumass.com/</a>.<br><br><br>If you cannot find your answer on our website, then please feel free to shoot us an email at <a href="mailto:team@hackumass.com" style="color:#4CAF50;">team@hackumass.com</a><br><br><br>Thanks again for registering for our event, and we look forward to seeing you there!</p>`;
+    return `<p style="margin:0 0 20px;font-size:16px;color:#333;">Hey ${name},<br><br>Congratulations! You've been accepted to participate in HackUMass.<br><br>The check-in and opening ceremony will begin at 6:30 PM at the Campus Center Auditorium (1 Campus Center Way, Amherst, MA 01002). The event is from November 7th to 9th, 2025 at the Integrative Learning Center (ILC).<br><br>In order to participate, make sure you join our Discord (<a href="https://discord.gg/bATf3zC2" style="color:#4CAF50;">https://discord.gg/bATf3zC2</a>)! There, you will find more information about the event. If you have any questions please visit our website at <a href="https://hackumass.com/" style="color:#4CAF50;">https://hackumass.com/</a>.<br><br>If you cannot find your answer on our website, then please feel free to shoot us an email at <a href="mailto:team@hackumass.com" style="color:#4CAF50;">team@hackumass.com</a><br><br>Thanks again for registering for our event, and we look forward to seeing you there!</p>`;
   }
   if (decision === 'waitlisted') {
     return `<p style="margin:0 0 20px;font-size:16px;color:#333;">Hi ${name},<br><br>Thank you for applying to HackUMass XIII. You have been placed on the waitlist. We will notify you if a spot opens.</p>`;
@@ -178,18 +178,13 @@ function renderText(params: { name: string; decision: Decision }): string {
   if (decision === 'accepted') {
     return `Hey ${name},
 
-
 Congratulations! You've been accepted to participate in HackUMass.
-
 
 The check-in and opening ceremony will begin at 6:30 PM at the Campus Center Auditorium (1 Campus Center Way, Amherst, MA 01002). The event is from November 7th to 9th, 2025 at the Integrative Learning Center (ILC).
 
-
 In order to participate, make sure you join our Discord (https://discord.gg/bATf3zC2)! There, you will find more information about the event. If you have any questions please visit our website at https://hackumass.com/.
 
-
 If you cannot find your answer on our website, then please feel free to shoot us an email at team@hackumass.com
-
 
 Thanks again for registering for our event, and we look forward to seeing you there!
 

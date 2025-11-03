@@ -69,11 +69,10 @@ export function Dashboard() {
   }, [q]);
 
   async function decide(applicantId: string, decision: 'accepted' | 'waitlisted' | 'denied') {
-    const note = prompt(`Optional note for ${decision}?`) || undefined;
     const res = await fetch(`${API_BASE}/update-status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
-      body: JSON.stringify({ applicantId, decision, note, organizerName }),
+      body: JSON.stringify({ applicantId, decision, note: undefined, organizerName }),
     });
     if (!res.ok) {
       if (res.status === 409) {
