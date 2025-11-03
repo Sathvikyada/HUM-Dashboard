@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { Dashboard } from './pages/Dashboard';
 import { Scanner } from './pages/Scanner';
+import { EmailLogs } from './pages/EmailLogs';
 
 function AppShell() {
   return (
@@ -12,11 +13,13 @@ function AppShell() {
           <h1 style={{ margin: 0 }}>HackUMass Admin</h1>
           <nav style={{ display: 'flex', gap: 12 }}>
             <Link to="/">Dashboard</Link>
+            <Link to="/email-logs">Email Logs</Link>
             <Link to="/scanner">Scanner</Link>
           </nav>
         </header>
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/email-logs" element={<EmailLogs />} />
           <Route path="/scanner" element={<Scanner />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
