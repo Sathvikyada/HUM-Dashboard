@@ -14,6 +14,7 @@
     "verify-data": "tsx scripts/verify-data.ts",
     "count-applicants": "tsx scripts/count-applicants.ts",
     "check-duplicate-emails": "tsx scripts/check-duplicate-emails.ts",
+    "check-missing-deliveries": "tsx scripts/check-missing-deliveries.ts",
     "inspect-xlsx": "tsx scripts/inspect-xlsx.ts",
     "import-xlsx": "tsx scripts/import-xlsx.ts",
     "verify-xlsx-import": "tsx scripts/verify-xlsx-import.ts",

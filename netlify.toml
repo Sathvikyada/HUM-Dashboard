@@ -10,7 +10,8 @@
   status = 200
 
 # Scheduled function to sync from Google Sheets every 15 minutes
-[[scheduled.functions]]
-  name = "sync-from-sheets"
-  cron = "*/15 * * * *"
+# DISABLED - Uncomment below to re-enable
+# [[scheduled.functions]]
+#   name = "sync-from-sheets"
+#   cron = "*/15 * * * *"
 
