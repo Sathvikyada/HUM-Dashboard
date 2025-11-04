@@ -10,7 +10,7 @@ export const handler: Handler = async (event) => {
     const { token, mealType } = body as { token: string; mealType?: MealType };
     if (!token) return { statusCode: 400, body: 'Missing token' };
 
-    // Get the applicant first to check existence and current state
+    // Get the applicant first to check existence
     const { data: applicant, error: fetchError } = await supabaseAdmin
       .from('applicants')
       .select('id, checked_in_at, meal_checkins')
@@ -22,41 +22,83 @@ export const handler: Handler = async (event) => {
     }
 
     if (mealType) {
-      // Meal check-in
-      const mealCheckins = (applicant.meal_checkins as Record<string, string>) || {};
+      // Meal check-in - use atomic update with WHERE clause to prevent race conditions
+      // Only update if the mealType key doesn't exist in the JSONB
+      const timestamp = new Date().toISOString();
       
-      // Check if already checked in for this meal
-      if (mealCheckins[mealType]) {
+      // Use PostgreSQL's jsonb_set with a WHERE clause that checks the key doesn't exist
+      // This ensures atomicity: if 7 organizers scan at once, only the first update succeeds
+      const { data: updated, error: updateError } = await supabaseAdmin.rpc('atomic_meal_checkin', {
+        applicant_id: applicant.id,
+        meal_type: mealType,
+        checkin_time: timestamp,
+      });
+
+      // If RPC function doesn't exist, fall back to check-then-update (with race condition risk)
+      // This happens if the database function hasn't been created yet
+      if (updateError && updateError.message.includes('function') && updateError.message.includes('does not exist')) {
+        // Fallback: Check and update manually (race condition possible but unlikely)
+        const mealCheckins = (applicant.meal_checkins as Record<string, string>) || {};
+        
+        if (mealCheckins[mealType]) {
+          return { statusCode: 409, body: JSON.stringify({ ok: false, reason: 'ALREADY_CHECKED_IN' }) };
+        }
+
+        const updatedMealCheckins = {
+          ...mealCheckins,
+          [mealType]: timestamp,
+        };
+
+        const { error: fallbackError } = await supabaseAdmin
+          .from('applicants')
+          .update({ meal_checkins: updatedMealCheckins })
+          .eq('id', applicant.id);
+
+        if (fallbackError) throw fallbackError;
+
+        // Re-check to see if we actually succeeded (detect race condition)
+        const { data: verify } = await supabaseAdmin
+          .from('applicants')
+          .select('meal_checkins')
+          .eq('id', applicant.id)
+          .single();
+
+        const verifyCheckins = (verify?.meal_checkins as Record<string, string>) || {};
+        if (verifyCheckins[mealType] !== timestamp) {
+          // Someone else updated first
+          return { statusCode: 409, body: JSON.stringify({ ok: false, reason: 'ALREADY_CHECKED_IN' }) };
+        }
+      } else if (updateError) {
+        // If update failed because key already exists (our function returns null)
+        if (updateError.message.includes('already exists') || updateError.message.includes('duplicate')) {
+          return { statusCode: 409, body: JSON.stringify({ ok: false, reason: 'ALREADY_CHECKED_IN' }) };
+        }
+        throw updateError;
+      } else if (!updated) {
+        // RPC function returned null/false, meaning already checked in
         return { statusCode: 409, body: JSON.stringify({ ok: false, reason: 'ALREADY_CHECKED_IN' }) };
       }
 
-      // Update meal check-ins
-      const updatedMealCheckins = {
-        ...mealCheckins,
-        [mealType]: new Date().toISOString(),
-      };
-
-      const { error: updateError } = await supabaseAdmin
-        .from('applicants')
-        .update({ meal_checkins: updatedMealCheckins })
-        .eq('id', applicant.id);
-
-      if (updateError) throw updateError;
-
       return { statusCode: 200, body: JSON.stringify({ ok: true, applicantId: applicant.id, mealType }) };
     } else {
-      // Regular check-in
+      // Regular check-in - use conditional update (atomic)
       if (applicant.checked_in_at) {
         return { statusCode: 409, body: JSON.stringify({ ok: false, reason: 'ALREADY_CHECKED_IN' }) };
       }
 
-      const { error: updateError } = await supabaseAdmin
+      // This update is atomic because it only succeeds if checked_in_at is still null
+      const { error: updateError, data: updated } = await supabaseAdmin
         .from('applicants')
         .update({ checked_in_at: new Date().toISOString() })
         .eq('id', applicant.id)
-        .is('checked_in_at', null);
+        .is('checked_in_at', null)
+        .select('id')
+        .single();
 
-      if (updateError) throw updateError;
+      // If no rows were updated, it means another request already set checked_in_at
+      if (updateError || !updated) {
+        return { statusCode: 409, body: JSON.stringify({ ok: false, reason: 'ALREADY_CHECKED_IN' }) };
+      }
 
       return { statusCode: 200, body: JSON.stringify({ ok: true, applicantId: applicant.id }) };
     }
