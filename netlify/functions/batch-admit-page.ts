@@ -83,6 +83,7 @@ const EXCLUDED_EMAILS = new Set([
   'virmania@purdue.edu',
   'zayeedbinkabir@gmail.com',
   'yangryan133@gmail.com',
+  'ykumareddy@gmail.com',
 ].map(e => e.toLowerCase()));
 
 export const handler: Handler = async (event) => {
