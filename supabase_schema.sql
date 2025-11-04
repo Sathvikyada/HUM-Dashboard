@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS public.applicants (
   decided_by TEXT,
   qr_token TEXT UNIQUE,
   checked_in_at TIMESTAMPTZ,
+  meal_checkins JSONB DEFAULT '{}'::jsonb, -- Stores meal check-in timestamps: {"sat_breakfast": "2025-11-07T08:00:00Z", ...}
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
