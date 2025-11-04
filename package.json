@@ -12,6 +12,15 @@
     "sync-sheets": "tsx scripts/sync-google-sheets.ts",
     "fix-university": "tsx scripts/fix-university.ts",
     "verify-data": "tsx scripts/verify-data.ts",
+    "count-applicants": "tsx scripts/count-applicants.ts",
+    "check-duplicate-emails": "tsx scripts/check-duplicate-emails.ts",
+    "inspect-xlsx": "tsx scripts/inspect-xlsx.ts",
+    "import-xlsx": "tsx scripts/import-xlsx.ts",
+    "verify-xlsx-import": "tsx scripts/verify-xlsx-import.ts",
+    "check-emails": "tsx scripts/check-emails.ts",
+    "list-emails-exact": "tsx scripts/list-emails-exact.ts",
+    "verify-xlsx-in-db": "tsx scripts/verify-xlsx-in-db.ts",
+    "check-missing-emails": "tsx scripts/check-missing-emails.ts",
     "find-duplicates": "tsx scripts/find-duplicates.ts",
     "cleanup-duplicates": "tsx scripts/cleanup-duplicates.ts",
     "diagnose-missing": "tsx scripts/diagnose-missing.ts"
@@ -21,6 +30,7 @@
     "@sendgrid/mail": "^8.1.6",
     "@supabase/supabase-js": "^2.45.1",
     "@tanstack/react-table": "^8.20.5",
+    "@types/xlsx": "^0.0.35",
     "@zxing/browser": "^0.1.5",
     "axios": "^1.7.7",
     "googleapis": "^164.1.0",
@@ -39,7 +49,9 @@
     "dotenv": "^16.4.5",
     "prettier": "^3.3.3",
     "tsx": "^4.7.1",
+    "xlsx": "^0.18.5",
     "typescript": "^5.6.3",
-    "vite": "^5.4.8"
+    "vite": "^5.4.8",
+    "xlsx": "^0.18.5"
   }
 }

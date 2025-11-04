@@ -26,6 +26,7 @@ export function Dashboard() {
   const [organizerName, setOrganizerName] = React.useState(localStorage.getItem('organizerName') || '');
   const [selectedApplicant, setSelectedApplicant] = React.useState<Applicant | null>(null);
   const [currentPage, setCurrentPage] = React.useState(1);
+  const [batchAdmitting, setBatchAdmitting] = React.useState(false);
   const pageSize = 50;
 
   React.useEffect(() => {
@@ -87,6 +88,66 @@ export function Dashboard() {
     await load();
   }
 
+  async function batchAdmitPage() {
+    if (!adminToken) {
+      alert('Please enter your admin token first');
+      return;
+    }
+
+    const eligibleCount = items.filter(a => a.status === 'pending').length;
+    if (eligibleCount === 0) {
+      alert('No pending applicants on this page to admit');
+      return;
+    }
+
+    const confirmMsg = `Admit all pending applicants on this page?\n\n` +
+      `Total on page: ${items.length}\n` +
+      `Pending (will be admitted): ${eligibleCount}\n` +
+      `Already decided (will be skipped): ${items.length - eligibleCount}\n\n` +
+      `Note: Applicants on the exclusion list will be skipped automatically.`;
+    
+    if (!confirm(confirmMsg)) {
+      return;
+    }
+
+    setBatchAdmitting(true);
+    try {
+      const applicantIds = items.map(a => a.id);
+      const res = await fetch(`${API_BASE}/batch-admit-page`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ applicantIds, organizerName }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(`Error: ${data.error || 'Failed to batch admit'}`);
+        return;
+      }
+
+      const message = `Batch admission complete!\n\n` +
+        `Total on page: ${data.total}\n` +
+        `Eligible: ${data.eligible}\n` +
+        `Skipped: ${data.skipped}\n` +
+        `Admitted: ${data.admitted}\n` +
+        `Failed: ${data.failed}`;
+
+      if (data.errors && data.errors.length > 0) {
+        alert(message + `\n\nErrors:\n${data.errors.map((e: any) => `- ${e.email}: ${e.error}`).join('\n')}`);
+      } else {
+        alert(message);
+      }
+
+      // Refresh the page
+      await load();
+    } catch (err: any) {
+      alert(`Error: ${err.message || 'Failed to batch admit'}`);
+    } finally {
+      setBatchAdmitting(false);
+    }
+  }
+
   const totalPages = Math.ceil(total / pageSize);
 
   return (
@@ -107,6 +168,22 @@ export function Dashboard() {
         />
         <input placeholder="Search name or email" value={q} onChange={(e) => setQ(e.target.value)} />
         <button onClick={() => load(currentPage)} disabled={!adminToken || loading}>{loading ? 'Loading…' : 'Search'}</button>
+        <button 
+          onClick={batchAdmitPage} 
+          disabled={!adminToken || loading || batchAdmitting}
+          style={{
+            backgroundColor: '#0a7',
+            color: 'white',
+            border: 'none',
+            padding: '8px 16px',
+            borderRadius: 4,
+            cursor: batchAdmitting || loading || !adminToken ? 'not-allowed' : 'pointer',
+            opacity: batchAdmitting || loading || !adminToken ? 0.6 : 1,
+            fontWeight: 600
+          }}
+        >
+          {batchAdmitting ? 'Admitting…' : 'Admit All on Page'}
+        </button>
         <span style={{ marginLeft: 'auto' }}>
           Page {currentPage} of {totalPages} | Total: {total}
         </span>
