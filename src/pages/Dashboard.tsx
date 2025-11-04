@@ -27,7 +27,24 @@ export function Dashboard() {
   const [selectedApplicant, setSelectedApplicant] = React.useState<Applicant | null>(null);
   const [currentPage, setCurrentPage] = React.useState(1);
   const [batchAdmitting, setBatchAdmitting] = React.useState(false);
+  const [deliveryStatus, setDeliveryStatus] = React.useState<{
+    emails: string[];
+    status: Record<string, { delivered: boolean; deliveredAt?: string }>;
+    delivered: number;
+    pending: number;
+    polling: boolean;
+  } | null>(null);
+  const pollIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
   const pageSize = 50;
+
+  // Cleanup polling on unmount
+  React.useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, []);
 
   React.useEffect(() => {
     if (adminToken) localStorage.setItem('adminToken', adminToken);
@@ -88,6 +105,30 @@ export function Dashboard() {
     await load();
   }
 
+  async function checkEmailDelivery(emails: string[]): Promise<void> {
+    try {
+      const res = await fetch(`${API_BASE}/check-email-delivery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ emails }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.ok) {
+        setDeliveryStatus({
+          emails,
+          status: data.status,
+          delivered: data.delivered,
+          pending: data.pending,
+          polling: true,
+        });
+      }
+    } catch (err: any) {
+      console.error('Error checking email delivery:', err);
+    }
+  }
+
   async function batchAdmitPage() {
     if (!adminToken) {
       alert('Please enter your admin token first');
@@ -111,6 +152,13 @@ export function Dashboard() {
     }
 
     setBatchAdmitting(true);
+    // Clear any existing polling
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+    setDeliveryStatus(null);
+    
     try {
       const applicantIds = items.map(a => a.id);
       const res = await fetch(`${API_BASE}/batch-admit-page`, {
@@ -135,8 +183,40 @@ export function Dashboard() {
 
       if (data.errors && data.errors.length > 0) {
         alert(message + `\n\nErrors:\n${data.errors.map((e: any) => `- ${e.email}: ${e.error}`).join('\n')}`);
-      } else {
-        alert(message);
+      }
+
+      // Start polling for email delivery status
+      if (data.sentEmails && data.sentEmails.length > 0) {
+        // Clear any existing polling interval
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+
+        const duration = 60000; // 1 minute
+        const interval = 3000; // Check every 3 seconds
+
+        // Initial check
+        await checkEmailDelivery(data.sentEmails);
+
+        // Poll every 3 seconds for 1 minute
+        let pollCount = 0;
+        const maxPolls = duration / interval; // 20 polls over 1 minute
+        
+        pollIntervalRef.current = setInterval(() => {
+          pollCount++;
+          
+          if (pollCount >= maxPolls) {
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+            }
+            setDeliveryStatus(prev => prev ? { ...prev, polling: false } : null);
+            return;
+          }
+          
+          checkEmailDelivery(data.sentEmails).catch(console.error);
+        }, interval);
       }
 
       // Refresh the page
@@ -249,6 +329,62 @@ export function Dashboard() {
           >
             Next
           </button>
+        </div>
+      )}
+
+      {deliveryStatus && deliveryStatus.emails.length > 0 && (
+        <div style={{
+          marginTop: 24,
+          padding: 16,
+          backgroundColor: '#f9f9f9',
+          borderRadius: 8,
+          border: '1px solid #ddd'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: 18 }}>Email Delivery Status {deliveryStatus.polling && '⏳ Polling...'}</h3>
+            <div style={{ fontSize: 14, color: '#666' }}>
+              ✅ {deliveryStatus.delivered} delivered | ⏳ {deliveryStatus.pending} pending
+            </div>
+          </div>
+          <div style={{ 
+            maxHeight: 200, 
+            overflowY: 'auto',
+            fontSize: 12,
+            fontFamily: 'monospace'
+          }}>
+            {deliveryStatus.emails.map(email => {
+              const status = deliveryStatus.status[email];
+              const isDelivered = status?.delivered || false;
+              return (
+                <div 
+                  key={email} 
+                  style={{ 
+                    padding: '4px 8px',
+                    marginBottom: 2,
+                    backgroundColor: isDelivered ? '#e8f5e9' : '#fff3e0',
+                    borderRadius: 4,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}
+                >
+                  <span style={{ color: isDelivered ? '#2e7d32' : '#f57c00' }}>
+                    {isDelivered ? '✅' : '⏳'} {email}
+                  </span>
+                  {status?.deliveredAt && (
+                    <span style={{ fontSize: 11, color: '#666' }}>
+                      {new Date(status.deliveredAt).toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {!deliveryStatus.polling && (
+            <div style={{ marginTop: 12, fontSize: 12, color: '#666', fontStyle: 'italic' }}>
+              Polling stopped after 1 minute. Check Email Logs page for final delivery status.
+            </div>
+          )}
         </div>
       )}
 

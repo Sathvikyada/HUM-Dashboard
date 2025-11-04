@@ -130,7 +130,11 @@ export const handler: Handler = async (event) => {
       admitted: 0,
       failed: 0,
       errors: [] as Array<{ email: string; error: string }>,
+      sentEmails: [] as string[],
     };
+
+    // Track emails that were successfully sent
+    const sentEmails: string[] = [];
 
     // Process each eligible applicant
     for (const applicant of toAdmit) {
@@ -168,6 +172,7 @@ export const handler: Handler = async (event) => {
           qrBuffer,
         });
 
+        sentEmails.push(applicant.email);
         results.admitted++;
       } catch (err: any) {
         results.failed++;
@@ -177,6 +182,9 @@ export const handler: Handler = async (event) => {
         });
       }
     }
+
+    // Return sent emails for real-time delivery checking (done by frontend)
+    results.sentEmails = sentEmails;
 
     return {
       statusCode: 200,
