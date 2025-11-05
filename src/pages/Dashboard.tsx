@@ -29,6 +29,18 @@ export function Dashboard() {
   const [batchAdmitting, setBatchAdmitting] = React.useState(false);
   const [sendingDiscordUpdate, setSendingDiscordUpdate] = React.useState(false);
   const [testingDiscordEmail, setTestingDiscordEmail] = React.useState(false);
+  const [discordUpdateStatus, setDiscordUpdateStatus] = React.useState<{
+    total: number;
+    sent: number;
+    failed: number;
+    remaining: number;
+    completedBatches: number;
+    totalBatches: number;
+    timedOut: boolean;
+    progress: Array<{ batch: number; sent: number; failed: number; total: number; timestamp: string }>;
+    errors: Array<{ email: string; error: string }>;
+    message?: string;
+  } | null>(null);
   const [deliveryStatus, setDeliveryStatus] = React.useState<{
     emails: string[];
     status: Record<string, { delivered: boolean; deliveredAt?: string }>;
@@ -151,22 +163,19 @@ export function Dashboard() {
 
     const confirmMsg = `Send Discord link update email to missing recipients?\n\n` +
       `This will send the updated Discord link to applicants who received the acceptance email but haven't received the Discord update yet.\n\n` +
-      `Note: Emails are sent in batches of 20 with 1 minute delay between batches.\n` +
-      `This may take ${Math.ceil(778 / 20)}-${Math.ceil(778 / 20) + 5} minutes to complete.\n\n` +
-      `Please keep this tab open until completion.`;
+      `Note: Emails are sent in batches of 20 with 5 second delay between batches.\n` +
+      `The function may timeout after ~20 seconds. If it does, click the button again to continue.\n` +
+      `Progress will be shown below.\n\n` +
+      `Continue?`;
     
     if (!confirm(confirmMsg)) {
       return;
     }
 
     setSendingDiscordUpdate(true);
+    setDiscordUpdateStatus(null);
+    
     try {
-      // Show progress message
-      const progressMsg = `Sending Discord update emails...\n\n` +
-        `This will take several minutes. Please keep this tab open.\n\n` +
-        `You can check the browser console for detailed progress updates.`;
-      alert(progressMsg);
-
       const res = await fetch(`${API_BASE}/send-discord-update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
@@ -179,37 +188,62 @@ export function Dashboard() {
         return;
       }
 
-      // Build detailed message with progress
-      let message = `Discord update email sending complete!\n\n`;
+      // Update status panel
+      const totalBatches = Math.ceil((data.total || 0) / 20);
+      setDiscordUpdateStatus({
+        total: data.total || 0,
+        sent: data.sent || 0,
+        failed: data.failed || 0,
+        remaining: data.remainingEmails || (data.total || 0) - (data.sent || 0) - (data.failed || 0),
+        completedBatches: data.completedBatches || 0,
+        totalBatches: totalBatches,
+        timedOut: data.timedOut || false,
+        progress: data.progress || [],
+        errors: data.errors || [],
+        message: data.message,
+      });
+
+      // Show alert with summary
+      let message = data.message || 'Discord update email sending complete!\n\n';
       
+      if (data.timedOut) {
+        message += `⚠️ Function timed out after sending ${data.sent} emails.\n\n`;
+        message += `Click "Send Discord Update" again to continue with remaining ${data.remainingEmails} emails.\n\n`;
+      }
+
       if (data.progress && data.progress.length > 0) {
         message += `Progress by batch:\n`;
-        data.progress.slice(-5).forEach((p: any) => {
+        data.progress.forEach((p: any) => {
           message += `  Batch ${p.batch}: ${p.sent} sent, ${p.failed} failed\n`;
         });
         message += `\n`;
       }
 
       const verification = data.verification || {};
-      message += `Summary:\n` +
-        `  Total emails: ${verification.originalListCount || data.total || 0}\n` +
-        `  Successfully sent: ${data.sent}\n` +
-        `  Failed to send: ${data.failed}\n` +
-        `  Verified delivered: ${verification.verifiedDelivered || 0}\n` +
-        `  Missing deliveries: ${verification.missingDeliveries || 0}\n` +
-        `  Coverage: ${verification.coverage || 0}%\n` +
-        `  All covered: ${verification.allCovered ? '✅ Yes' : '❌ No'}`;
+      if (verification.originalListCount) {
+        message += `Summary:\n` +
+          `  Total emails: ${verification.originalListCount}\n` +
+          `  Successfully sent: ${data.sent}\n` +
+          `  Failed to send: ${data.failed}\n`;
+        
+        if (verification.verifiedDelivered !== undefined) {
+          message += `  Verified delivered: ${verification.verifiedDelivered}\n` +
+            `  Missing deliveries: ${verification.missingDeliveries || 0}\n` +
+            `  Coverage: ${verification.coverage || 0}%\n`;
+        }
+      } else {
+        message += `Summary:\n` +
+          `  Total emails: ${data.total || 0}\n` +
+          `  Successfully sent: ${data.sent || 0}\n` +
+          `  Failed to send: ${data.failed || 0}\n` +
+          `  Remaining: ${data.remainingEmails || 0}\n`;
+      }
 
-      if (data.errors && data.errors.length > 0) {
+      if (data.errors && data.errors.length > 0 && data.errors.length <= 5) {
+        message += `\n\nErrors:\n${data.errors.map((e: any) => `- ${e.email}: ${e.error}`).join('\n')}`;
+      } else if (data.errors && data.errors.length > 5) {
         message += `\n\nErrors (showing first 5):\n${data.errors.slice(0, 5).map((e: any) => `- ${e.email}: ${e.error}`).join('\n')}`;
-        if (data.errors.length > 5) {
-          message += `\n... and ${data.errors.length - 5} more errors`;
-        }
-      } else if (verification.missingEmails && verification.missingEmails.length > 0) {
-        message += `\n\n⚠️ Missing deliveries (showing first 10):\n${verification.missingEmails.slice(0, 10).join('\n')}`;
-        if (verification.missingEmails.length > 10) {
-          message += `\n... and ${verification.missingEmails.length - 10} more`;
-        }
+        message += `\n... and ${data.errors.length - 5} more errors`;
       }
 
       alert(message);
@@ -217,7 +251,9 @@ export function Dashboard() {
       // Refresh to show updated status
       await load();
     } catch (err: any) {
-      alert(`Error: ${err.message || 'Failed to send Discord update emails'}`);
+      const errorMsg = err.message || 'Failed to send Discord update emails';
+      alert(`Error: ${errorMsg}`);
+      console.error('Discord update error:', err);
     } finally {
       setSendingDiscordUpdate(false);
     }
@@ -479,6 +515,143 @@ export function Dashboard() {
           >
             Next
           </button>
+        </div>
+      )}
+
+      {discordUpdateStatus && (
+        <div style={{
+          marginTop: 24,
+          padding: 16,
+          backgroundColor: discordUpdateStatus.timedOut ? '#fff3e0' : '#f9f9f9',
+          borderRadius: 8,
+          border: `1px solid ${discordUpdateStatus.timedOut ? '#ff9800' : '#ddd'}`
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: 18 }}>
+              Discord Update Email Status
+              {discordUpdateStatus.timedOut && ' ⏰ Timed Out'}
+              {sendingDiscordUpdate && ' ⏳ Sending...'}
+            </h3>
+            <div style={{ fontSize: 14, color: '#666' }}>
+              ✅ {discordUpdateStatus.sent} sent | ❌ {discordUpdateStatus.failed} failed | ⏳ {discordUpdateStatus.remaining} remaining
+            </div>
+          </div>
+          
+          {discordUpdateStatus.message && (
+            <div style={{ 
+              marginBottom: 12, 
+              padding: 8, 
+              backgroundColor: discordUpdateStatus.timedOut ? '#ffe0b2' : '#e8f5e9',
+              borderRadius: 4,
+              fontSize: 13
+            }}>
+              {discordUpdateStatus.message}
+            </div>
+          )}
+
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 14, marginBottom: 8, fontWeight: 600 }}>
+              Progress: {discordUpdateStatus.completedBatches}/{discordUpdateStatus.totalBatches} batches completed
+            </div>
+            <div style={{ 
+              width: '100%', 
+              height: 20, 
+              backgroundColor: '#e0e0e0', 
+              borderRadius: 10,
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                width: `${(discordUpdateStatus.sent / discordUpdateStatus.total) * 100}%`,
+                height: '100%',
+                backgroundColor: discordUpdateStatus.timedOut ? '#ff9800' : '#4CAF50',
+                transition: 'width 0.3s ease',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                fontSize: 11,
+                fontWeight: 600
+              }}>
+                {Math.round((discordUpdateStatus.sent / discordUpdateStatus.total) * 100)}%
+              </div>
+            </div>
+          </div>
+
+          {discordUpdateStatus.progress && discordUpdateStatus.progress.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Batch Progress:</div>
+              <div style={{ 
+                maxHeight: 150, 
+                overflowY: 'auto',
+                fontSize: 12,
+                fontFamily: 'monospace'
+              }}>
+                {discordUpdateStatus.progress.map((p, idx) => (
+                  <div 
+                    key={idx}
+                    style={{ 
+                      padding: '4px 8px',
+                      marginBottom: 2,
+                      backgroundColor: p.failed > 0 ? '#ffebee' : '#e8f5e9',
+                      borderRadius: 4,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <span>
+                      Batch {p.batch}: {p.sent} sent, {p.failed} failed
+                    </span>
+                    <span style={{ fontSize: 10, color: '#666' }}>
+                      {new Date(p.timestamp).toLocaleTimeString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {discordUpdateStatus.errors && discordUpdateStatus.errors.length > 0 && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+                Errors ({discordUpdateStatus.errors.length}):
+              </div>
+              <div style={{ 
+                maxHeight: 100, 
+                overflowY: 'auto',
+                fontSize: 11,
+                fontFamily: 'monospace',
+                backgroundColor: '#ffebee',
+                padding: 8,
+                borderRadius: 4
+              }}>
+                {discordUpdateStatus.errors.slice(0, 10).map((e, idx) => (
+                  <div key={idx} style={{ marginBottom: 4 }}>
+                    <span style={{ color: '#c62828' }}>{e.email}:</span> {e.error}
+                  </div>
+                ))}
+                {discordUpdateStatus.errors.length > 10 && (
+                  <div style={{ color: '#666', fontStyle: 'italic' }}>
+                    ... and {discordUpdateStatus.errors.length - 10} more errors
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {discordUpdateStatus.timedOut && (
+            <div style={{ 
+              marginTop: 12, 
+              padding: 8, 
+              backgroundColor: '#fff3e0',
+              borderRadius: 4,
+              fontSize: 13,
+              fontWeight: 600,
+              color: '#e65100'
+            }}>
+              ⚠️ Function timed out. Click "Send Discord Update" again to continue with remaining emails.
+            </div>
+          )}
         </div>
       )}
 
