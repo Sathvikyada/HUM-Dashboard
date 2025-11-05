@@ -1,0 +1,64 @@
+Travel Stipend Sync Log
+Generated: 2025-11-05T19:32:56.158Z
+Total rows processed: 52
+
+=== SUMMARY ===
+New applicants added: 0
+Existing applicants updated: 52
+Skipped: 0
+Errors: 0
+
+=== EXISTING APPLICANTS UPDATED ===
+1. Kairos Liang (kairosliang7@gmail.com) - Early App (updated)
+2. Ryan Mendoza (rymendoza15@gmail.com) - Early App (updated)
+3. Hernan Carrillo Martinez (hernandavidcm@gmail.com) - Early App (updated)
+4. Grace Wei (gtw25@cornell.edu) - Early App (updated)
+5. Andrew Rusli (andrewrusli@college.harvard.edu) - Early App (updated)
+6. Eddy Zhao (eddyz@berkeley.edu) - Early App (updated)
+7. Aiman Koli (aiman.koli@rutgers.edu) - Early App (updated)
+8. Shang En Sim (simshangen@gmail.com) - Early App (updated)
+9. Elena Jin (elena.jin@tufts.edu) - Early App (updated)
+10. elaine wu (ew457@cornell.edu) - General App (updated)
+11. Jillian Chong (jc2886@cornell.edu) - General App (updated)
+12. Kshitij Kesharwani (kesharwani_kshitij@wheatoncollege.edu) - Early App (updated)
+13. Nhan Ton (tdn26903@bu.edu) - General App (updated)
+14. Soumya Dubey (soumyadubeyus@gmail.com) - Early App (updated)
+15. Ketan Keshava (ketan.keshav7@gmail.com) - Early App (updated)
+16. Nagalekha Ramesh (nagalekha2009@gmail.com) - Early App (updated)
+17. Nguyen Le (nguyenle@bu.edu) - General App (updated)
+18. Ishita Sharma (ishitash4@gmail.com) - General App (updated)
+19. Srivishnu Piratla (srivishnupiratla@gmail.com) - Early App (updated)
+20. Nathan Raikman (nraikm@gmail.com) - Early App (updated)
+21. Shashank Ramji (shashank.ramji@gmail.com) - Early App (updated)
+22. Ashwin Subbu (ashwinboston7@gmail.com) - Early App (updated)
+23. Shashwath Ramji (shashwath.ramji@gmail.com) - Early App (updated)
+24. Surya Ghai (ssghai@umd.edu) - General App (updated)
+25. Rahat Moktadir (rahatmoktadir03@gmail.com) - Early App (updated)
+26. Kiran Malla (kiranmugu@gmail.com) - Early App (updated)
+27. Hoang Nguyen (nxhoang@bu.edu) - General App (updated)
+28. Sushant Burkule (sab10102@nyu.edu) - Early App (updated)
+29. Tasbia Uddin (tasbiauddin@gmail.com) - General App (updated)
+30. Sai Kiran Belana (saikiransanju22@gmail.com) - General App (updated)
+31. Ian Pang (ianpang126@gmail.com) - General App (updated)
+32. Nicholas Chong (nicholas.m.chong@gmail.com) - General App (updated)
+33. Aditya Manoj Krishna (adityamanojkrishna2005@gmail.com) - General App (updated)
+34. Nathaniel Simpson (simpsonn978@gmail.com) - General App (updated)
+35. Pranshu Shah (pranshushah2024@gmail.com) - General App (updated)
+36. Minh Dinh (minhd5@bu.edu) - General App (updated)
+37. Victor Long (victorlong7865@gmail.com) - General App (updated)
+38. Vibhu Gangina (gangina.v@northeastern.edu) - General App (updated)
+39. Artem Frenk (afrenk@wpi.edu) - General App (updated)
+40. Ryan Yang (yangryan133@gmail.com) - General App (updated)
+41. Dennis Liu (liu.denn@northeastern.edu) - General App (updated)
+42. Benjamin Santana (basantana@wpi.edu) - General App (updated)
+43. Alexander McGreevy (mcgreevy.a@northeastern.edu) - General App (updated)
+44. Kelby Chau (kelbychau11204@gmail.com) - General App (updated)
+45. Zayeed Bin Kabir (zayeedbinkabir@gmail.com) - General App (updated)
+46. Gianna Tan (gltan9265@gmail.com) - General App (updated)
+47. Luis Mendez (luis.a.mendez@uconn.edu) - Early App (updated)
+48. Siddharth Singh (siddsingh@cs.stonybrook.edu) - General App (updated)
+49. Ardi Dauti (ardidauti6@gmail.com) - General App (updated)
+50. Denali Schlesinger (dsch28@bu.edu) - General App (updated)
+51. Riwaz Shrestha (riwaz@bu.edu) - General App (updated)
+52. Sathvik Yadanaparthi (sathvikyadanaparthicoder@gmail.com) - General App (updated)
+

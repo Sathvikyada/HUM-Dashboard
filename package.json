@@ -10,6 +10,7 @@
     "functions:build": "echo Netlify builds functions automatically",
     "format": "prettier --write .",
     "sync-sheets": "tsx scripts/sync-google-sheets.ts",
+    "sync-travel-stipend": "tsx scripts/sync-travel-stipend-list.ts",
     "fix-university": "tsx scripts/fix-university.ts",
     "verify-data": "tsx scripts/verify-data.ts",
     "count-applicants": "tsx scripts/count-applicants.ts",

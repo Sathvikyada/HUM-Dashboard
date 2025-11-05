@@ -27,6 +27,16 @@ export function Dashboard() {
   const [selectedApplicant, setSelectedApplicant] = React.useState<Applicant | null>(null);
   const [currentPage, setCurrentPage] = React.useState(1);
   const [batchAdmitting, setBatchAdmitting] = React.useState(false);
+  const [sendingTravelStipend, setSendingTravelStipend] = React.useState(false);
+  const [testingTravelStipendEmail, setTestingTravelStipendEmail] = React.useState(false);
+  const [travelStipendStatus, setTravelStipendStatus] = React.useState<{
+    total: number;
+    sent: number;
+    failed: number;
+    skipped: number;
+    sentDetails: Array<{ email: string; name: string; stipendAmount: string }>;
+    errors: Array<{ email: string; error: string }>;
+  } | null>(null);
   const [deliveryStatus, setDeliveryStatus] = React.useState<{
     emails: string[];
     status: Record<string, { delivered: boolean; deliveredAt?: string }>;
@@ -127,6 +137,154 @@ export function Dashboard() {
       }
     } catch (err: any) {
       console.error('Error checking email delivery:', err);
+    }
+  }
+
+  async function testTravelStipendEmail() {
+    if (!adminToken) {
+      alert('Please enter your admin token first');
+      return;
+    }
+
+    const testEmail = prompt('Enter email address of applicant in database to send test travel stipend email:');
+    if (!testEmail) {
+      return;
+    }
+
+    setTestingTravelStipendEmail(true);
+    try {
+      const res = await fetch(`${API_BASE}/test-travel-stipend-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ 
+          email: testEmail,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(`Error: ${data.error || 'Failed to send test email'}\n\n${data.hint || ''}`);
+        return;
+      }
+
+      const applicant = data.applicant || {};
+      alert(`✅ Test travel stipend email sent successfully!\n\n` +
+        `Sent to: ${applicant.email || testEmail}\n` +
+        `Name: ${applicant.name || 'N/A'}\n` +
+        `Stipend Amount: $${applicant.stipendAmount || 'N/A'}\n\n` +
+        `Check your inbox for the email.`);
+    } catch (err: any) {
+      alert(`Error: ${err.message || 'Failed to send test email'}`);
+    } finally {
+      setTestingTravelStipendEmail(false);
+    }
+  }
+
+  async function sendTravelStipendEmails() {
+    if (!adminToken) {
+      alert('Please enter your admin token first');
+      return;
+    }
+
+    const confirmMsg = `Send travel stipend confirmation emails to all applicants in Travel Stipend Final List.xlsx?\n\n` +
+      `This will:\n` +
+      `- Send RSVP confirmation emails with travel stipend information\n` +
+      `- Mark applicants as ACCEPTED\n` +
+      `- Generate and attach QR codes\n` +
+      `- Update the database\n\n` +
+      `Continue?`;
+    
+    if (!confirm(confirmMsg)) {
+      return;
+    }
+
+    setSendingTravelStipend(true);
+    setTravelStipendStatus(null);
+    // Clear any existing polling
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+    setDeliveryStatus(null);
+    
+    try {
+      const res = await fetch(`${API_BASE}/send-travel-stipend-emails`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ organizerName }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(`Error: ${data.error || 'Failed to send travel stipend emails'}`);
+        return;
+      }
+
+      // Update status panel
+      setTravelStipendStatus({
+        total: data.total || 0,
+        sent: data.sent || 0,
+        failed: data.failed || 0,
+        skipped: data.skipped || 0,
+        sentDetails: data.sentDetails || [],
+        errors: data.errors || [],
+      });
+
+      const message = `Travel stipend emails sent!\n\n` +
+        `Total in list: ${data.total}\n` +
+        `Successfully sent: ${data.sent}\n` +
+        `Failed: ${data.failed}\n` +
+        `Skipped: ${data.skipped}\n\n` +
+        `All sent applicants have been marked as ACCEPTED and QR codes have been generated.`;
+
+      if (data.errors && data.errors.length > 0) {
+        alert(message + `\n\nErrors:\n${data.errors.slice(0, 5).map((e: any) => `- ${e.email}: ${e.error}`).join('\n')}`);
+      } else {
+        alert(message);
+      }
+
+      // Start polling for email delivery status
+      if (data.sentEmails && data.sentEmails.length > 0) {
+        // Clear any existing polling interval
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+
+        const duration = 180000; // 3 minutes
+        const interval = 3000; // Check every 3 seconds
+
+        // Initial check
+        await checkEmailDelivery(data.sentEmails);
+
+        // Poll every 3 seconds for 3 minutes
+        let pollCount = 0;
+        const maxPolls = duration / interval; // 60 polls over 3 minutes
+        
+        pollIntervalRef.current = setInterval(() => {
+          pollCount++;
+          
+          if (pollCount >= maxPolls) {
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+            }
+            setDeliveryStatus(prev => prev ? { ...prev, polling: false } : null);
+            return;
+          }
+          
+          checkEmailDelivery(data.sentEmails).catch(console.error);
+        }, interval);
+      }
+
+      // Refresh the page
+      await load();
+    } catch (err: any) {
+      alert(`Error: ${err.message || 'Failed to send travel stipend emails'}`);
+    } finally {
+      setSendingTravelStipend(false);
     }
   }
 
@@ -265,6 +423,38 @@ export function Dashboard() {
         >
           {batchAdmitting ? 'Admitting…' : 'Admit All on Page'}
         </button>
+        <button 
+          onClick={testTravelStipendEmail} 
+          disabled={!adminToken || loading || testingTravelStipendEmail}
+          style={{
+            backgroundColor: '#99AAB5',
+            color: 'white',
+            border: 'none',
+            padding: '8px 16px',
+            borderRadius: 4,
+            cursor: testingTravelStipendEmail || loading || !adminToken ? 'not-allowed' : 'pointer',
+            opacity: testingTravelStipendEmail || loading || !adminToken ? 0.6 : 1,
+            fontWeight: 600
+          }}
+        >
+          {testingTravelStipendEmail ? 'Sending…' : 'Test Travel Stipend Email'}
+        </button>
+        <button 
+          onClick={sendTravelStipendEmails} 
+          disabled={!adminToken || loading || sendingTravelStipend}
+          style={{
+            backgroundColor: '#FF6B35',
+            color: 'white',
+            border: 'none',
+            padding: '8px 16px',
+            borderRadius: 4,
+            cursor: sendingTravelStipend || loading || !adminToken ? 'not-allowed' : 'pointer',
+            opacity: sendingTravelStipend || loading || !adminToken ? 0.6 : 1,
+            fontWeight: 600
+          }}
+        >
+          {sendingTravelStipend ? 'Sending…' : 'Send Travel Stipend Emails'}
+        </button>
         <span style={{ marginLeft: 'auto' }}>
           Page {currentPage} of {totalPages} | Total: {total}
         </span>
@@ -334,6 +524,102 @@ export function Dashboard() {
       )}
 
 
+      {travelStipendStatus && (
+        <div style={{
+          marginTop: 24,
+          padding: 16,
+          backgroundColor: '#fff3e0',
+          borderRadius: 8,
+          border: '1px solid #FF6B35'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: 18, color: '#FF6B35' }}>📧 Travel Stipend Email Status</h3>
+            <div style={{ fontSize: 14, color: '#666' }}>
+              ✅ {travelStipendStatus.sent} sent | ❌ {travelStipendStatus.failed} failed | ⏭️ {travelStipendStatus.skipped} skipped
+            </div>
+          </div>
+          
+          {travelStipendStatus.sentDetails.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: '#333' }}>
+                ✅ Sent Emails ({travelStipendStatus.sentDetails.length}):
+              </div>
+              <div style={{ 
+                maxHeight: 300, 
+                overflowY: 'auto',
+                fontSize: 12,
+                fontFamily: 'monospace',
+                backgroundColor: '#ffffff',
+                padding: 8,
+                borderRadius: 4,
+                border: '1px solid #ddd'
+              }}>
+                {travelStipendStatus.sentDetails.map((detail, idx) => (
+                  <div 
+                    key={idx}
+                    style={{ 
+                      padding: '6px 8px',
+                      marginBottom: 4,
+                      backgroundColor: '#e8f5e9',
+                      borderRadius: 4,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <div>
+                      <span style={{ color: '#2e7d32', fontWeight: 600 }}>{detail.name}</span>
+                      <span style={{ color: '#666', marginLeft: 8 }}>{detail.email}</span>
+                    </div>
+                    <span style={{ color: '#FF6B35', fontWeight: 600 }}>${detail.stipendAmount}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {travelStipendStatus.errors.length > 0 && (
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: '#d32f2f' }}>
+                ❌ Errors ({travelStipendStatus.errors.length}):
+              </div>
+              <div style={{ 
+                maxHeight: 200, 
+                overflowY: 'auto',
+                fontSize: 12,
+                fontFamily: 'monospace',
+                backgroundColor: '#ffffff',
+                padding: 8,
+                borderRadius: 4,
+                border: '1px solid #ddd'
+              }}>
+                {travelStipendStatus.errors.map((error, idx) => (
+                  <div 
+                    key={idx}
+                    style={{ 
+                      padding: '6px 8px',
+                      marginBottom: 4,
+                      backgroundColor: '#ffebee',
+                      borderRadius: 4,
+                      borderLeft: '3px solid #d32f2f'
+                    }}
+                  >
+                    <div style={{ color: '#d32f2f', fontWeight: 600 }}>{error.email}</div>
+                    <div style={{ color: '#666', fontSize: 11, marginTop: 2 }}>{error.error}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginTop: 16, padding: 12, backgroundColor: '#ffffff', borderRadius: 4, border: '1px solid #ddd' }}>
+            <div style={{ fontSize: 13, color: '#333', lineHeight: 1.6 }}>
+              <strong>Summary:</strong> All successfully sent applicants have been marked as <strong>ACCEPTED</strong> in the database and their QR codes have been generated and attached to the emails.
+            </div>
+          </div>
+        </div>
+      )}
+
       {deliveryStatus && deliveryStatus.emails.length > 0 && (
         <div style={{
           marginTop: 24,
@@ -343,7 +629,7 @@ export function Dashboard() {
           border: '1px solid #ddd'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h3 style={{ margin: 0, fontSize: 18 }}>Email Delivery Status {deliveryStatus.polling && '⏳ Polling...'}</h3>
+            <h3 style={{ margin: 0, fontSize: 18 }}>📬 Email Delivery Status {deliveryStatus.polling && '⏳ Polling...'}</h3>
             <div style={{ fontSize: 14, color: '#666' }}>
               ✅ {deliveryStatus.delivered} delivered | ⏳ {deliveryStatus.pending} pending
             </div>
@@ -384,7 +670,7 @@ export function Dashboard() {
           </div>
           {!deliveryStatus.polling && (
             <div style={{ marginTop: 12, fontSize: 12, color: '#666', fontStyle: 'italic' }}>
-              Polling stopped after 1 minute. Check Email Logs page for final delivery status.
+              Polling stopped after 3 minutes. Check Email Logs page for final delivery status.
             </div>
           )}
         </div>
