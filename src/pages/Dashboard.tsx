@@ -171,18 +171,20 @@ export function Dashboard() {
         return;
       }
 
+      const verification = data.verification || {};
       const message = `Discord update email sent!\n\n` +
-        `Total delivered emails (from acceptance): ${data.originalDeliveredCount || data.total}\n` +
-        `Successfully sent: ${data.sent}\n` +
-        `Failed: ${data.failed}\n` +
-        `Verified delivered (Discord update): ${data.verifiedDelivered || data.discordDeliveredCount || 0}\n` +
-        `Coverage: ${data.coverage || 0}%\n` +
-        `Missing deliveries: ${data.missingDeliveries || 0}`;
+        `Original list: ${verification.originalListCount || data.total || 0} emails\n` +
+        `Attempted to send: ${data.sent}\n` +
+        `Failed to send: ${data.failed}\n` +
+        `Verified delivered: ${verification.verifiedDelivered || data.verifiedDelivered || 0}\n` +
+        `Missing deliveries: ${verification.missingDeliveries || data.missingDeliveries || 0}\n` +
+        `Coverage: ${verification.coverage || data.coverage || 0}%\n` +
+        `All covered: ${verification.allCovered ? '✅ Yes' : '❌ No'}`;
 
       if (data.errors && data.errors.length > 0) {
         alert(message + `\n\nErrors:\n${data.errors.map((e: any) => `- ${e.email}: ${e.error}`).join('\n')}`);
-      } else if (data.missingEmails && data.missingEmails.length > 0) {
-        alert(message + `\n\n⚠️ Missing deliveries:\n${data.missingEmails.slice(0, 10).join('\n')}${data.missingEmails.length > 10 ? `\n... and ${data.missingEmails.length - 10} more` : ''}`);
+      } else if (verification.missingEmails && verification.missingEmails.length > 0) {
+        alert(message + `\n\n⚠️ Missing deliveries:\n${verification.missingEmails.slice(0, 10).join('\n')}${verification.missingEmails.length > 10 ? `\n... and ${verification.missingEmails.length - 10} more` : ''}`);
       } else {
         alert(message);
       }

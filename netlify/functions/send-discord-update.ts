@@ -2,6 +2,8 @@ import type { Handler } from '@netlify/functions';
 import { supabaseAdmin } from './_utils/supabaseClient';
 import { requireAdmin } from './_utils/auth';
 import { sendDiscordLinkUpdate } from './_utils/email';
+import fs from 'fs';
+import path from 'path';
 
 export const handler: Handler = async (event) => {
   try {
@@ -10,54 +12,116 @@ export const handler: Handler = async (event) => {
       return { statusCode: 405, body: 'Method Not Allowed' };
     }
 
-    // Get all unique delivered emails from acceptance emails only
-    const { data: deliveredLogs, error: logsError } = await supabaseAdmin
-      .from('email_logs')
-      .select('applicant_email')
-      .eq('event_type', 'delivered')
-      .eq('subject', 'You are accepted to HackUMass! 🎉')
-      .order('created_at', { ascending: false });
+    // Try to read from delivered-emails-list.txt file first
+    const listFile = path.join(process.cwd(), 'delivered-emails-list.txt');
+    let emailsToUse = new Set<string>();
+    let emailToName = new Map<string, string>();
 
-    if (logsError) {
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: 'Failed to fetch delivered emails' }),
-      };
+    if (fs.existsSync(listFile)) {
+      console.log('📄 Reading from delivered-emails-list.txt file...');
+      const fileContent = fs.readFileSync(listFile, 'utf-8');
+      const lines = fileContent.split('\n').filter(line => {
+        const trimmed = line.trim();
+        return trimmed && !trimmed.startsWith('#') && trimmed.includes('|');
+      });
+
+      lines.forEach(line => {
+        const [email, name] = line.split('|').map(s => s.trim());
+        if (email) {
+          emailsToUse.add(email.toLowerCase());
+          emailToName.set(email.toLowerCase(), name || email);
+        }
+      });
+
+      console.log(`📧 Loaded ${emailsToUse.size} emails from file`);
+    } else {
+      console.log('📄 File not found, generating list from database...');
+      
+      // Get all accepted applicants first
+      const { data: acceptedApplicants, error: acceptedError } = await supabaseAdmin
+        .from('applicants')
+        .select('email, full_name')
+        .eq('status', 'accepted');
+
+      if (acceptedError) {
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: 'Failed to fetch accepted applicants' }),
+        };
+      }
+
+      if (!acceptedApplicants || acceptedApplicants.length === 0) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: 'No accepted applicants found' }),
+        };
+      }
+
+      const acceptedEmails = new Set(
+        acceptedApplicants.map(app => app.email.toLowerCase())
+      );
+
+      // Get all delivered emails and filter to only accepted applicants
+      const { data: deliveredLogs, error: logsError } = await supabaseAdmin
+        .from('email_logs')
+        .select('applicant_email, subject')
+        .eq('event_type', 'delivered')
+        .order('created_at', { ascending: false });
+
+      if (logsError) {
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: 'Failed to fetch delivered emails' }),
+        };
+      }
+
+      // Filter to only accepted applicants who received emails
+      const deliveredEmails = new Set<string>();
+      const acceptanceEmails = new Set<string>();
+      
+      (deliveredLogs || []).forEach(log => {
+        const emailLower = log.applicant_email.toLowerCase();
+        if (acceptedEmails.has(emailLower)) {
+          const subject = (log.subject || '').toLowerCase();
+          if (subject.includes('accepted') || subject.includes('hackumass')) {
+            acceptanceEmails.add(emailLower);
+          }
+          deliveredEmails.add(emailLower);
+        }
+      });
+
+      // Use acceptance emails if found, otherwise use all delivered emails
+      const emailsToUseSet = acceptanceEmails.size > 0 ? acceptanceEmails : deliveredEmails;
+
+      console.log(`📧 Found ${deliveredLogs?.length || 0} total delivery logs`);
+      console.log(`📧 Accepted applicants: ${acceptedApplicants.length}`);
+      console.log(`📧 Accepted applicants with delivered emails: ${deliveredEmails.size}`);
+      console.log(`📧 Accepted applicants with acceptance emails: ${acceptanceEmails.size}`);
+      console.log(`📧 Using ${emailsToUseSet.size} emails`);
+
+      emailsToUse = emailsToUseSet;
+
+      // Create name map
+      acceptedApplicants.forEach(app => {
+        const emailLower = app.email.toLowerCase();
+        if (emailsToUse.has(emailLower)) {
+          emailToName.set(emailLower, app.full_name || app.email);
+        }
+      });
     }
 
-    // Get unique delivered emails from acceptance emails
-    const deliveredEmails = new Set(
-      (deliveredLogs || []).map(log => log.applicant_email.toLowerCase())
-    );
-
-    if (deliveredEmails.size === 0) {
+    if (emailsToUse.size === 0) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ error: 'No delivered acceptance emails found' }),
+        body: JSON.stringify({ 
+          error: 'No delivered emails found',
+          hint: 'Run "npm run generate-delivered-emails" to generate the list first'
+        }),
       };
     }
-
-    // Get applicant details for these emails
-    const { data: applicants, error: applicantsError } = await supabaseAdmin
-      .from('applicants')
-      .select('email, full_name')
-      .in('email', Array.from(deliveredEmails));
-
-    if (applicantsError) {
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: 'Failed to fetch applicant details' }),
-      };
-    }
-
-    // Create a map of email to full_name
-    const emailToName = new Map<string, string>();
-    (applicants || []).forEach(app => {
-      emailToName.set(app.email.toLowerCase(), app.full_name || app.email);
-    });
 
     // Send emails in batches
-    const emails = Array.from(deliveredEmails);
+    const emails = Array.from(emailsToUse);
     const startTime = Date.now();
     const results = {
       total: emails.length,
@@ -112,7 +176,7 @@ export const handler: Handler = async (event) => {
       .from('email_logs')
       .select('applicant_email, created_at')
       .eq('event_type', 'delivered')
-      .eq('subject', 'HackUMass XIII - Updated Discord Link')
+      .ilike('subject', '%HackUMass XIII - Updated Discord Link%')
       .gte('created_at', verifyStartTime); // Since function started (with buffer)
 
     const discordDeliveredSet = new Set(
@@ -125,19 +189,35 @@ export const handler: Handler = async (event) => {
       return !discordDeliveredSet.has(emailLower);
     });
 
+    // Generate verification report
+    const verificationReport = {
+      originalListCount: emails.length,
+      attemptedToSend: results.sent,
+      failedToSend: results.failed,
+      verifiedDelivered: discordDeliveredSet.size,
+      missingDeliveries: missingDeliveries.length,
+      coverage: emails.length > 0 
+        ? Math.round((discordDeliveredSet.size / emails.length) * 100)
+        : 0,
+      missingEmails: missingDeliveries,
+      allCovered: missingDeliveries.length === 0,
+    };
+
+    console.log(`\n📊 Verification Report:`);
+    console.log(`   Original list: ${verificationReport.originalListCount} emails`);
+    console.log(`   Attempted to send: ${verificationReport.attemptedToSend}`);
+    console.log(`   Failed to send: ${verificationReport.failedToSend}`);
+    console.log(`   Verified delivered: ${verificationReport.verifiedDelivered}`);
+    console.log(`   Missing deliveries: ${verificationReport.missingDeliveries}`);
+    console.log(`   Coverage: ${verificationReport.coverage}%`);
+    console.log(`   All covered: ${verificationReport.allCovered ? '✅ Yes' : '❌ No'}`);
+
     return {
       statusCode: 200,
       body: JSON.stringify({
         ok: true,
         ...results,
-        originalDeliveredCount: emails.length,
-        discordDeliveredCount: discordDeliveredSet.size,
-        verifiedDelivered: discordDeliveredSet.size,
-        missingDeliveries: missingDeliveries.length,
-        missingEmails: missingDeliveries,
-        coverage: emails.length > 0 
-          ? Math.round((discordDeliveredSet.size / emails.length) * 100)
-          : 0,
+        verification: verificationReport,
       }),
     };
   } catch (err: any) {
