@@ -27,6 +27,8 @@ export function Dashboard() {
   const [selectedApplicant, setSelectedApplicant] = React.useState<Applicant | null>(null);
   const [currentPage, setCurrentPage] = React.useState(1);
   const [batchAdmitting, setBatchAdmitting] = React.useState(false);
+  const [sendingDiscordUpdate, setSendingDiscordUpdate] = React.useState(false);
+  const [testingDiscordEmail, setTestingDiscordEmail] = React.useState(false);
   const [deliveryStatus, setDeliveryStatus] = React.useState<{
     emails: string[];
     status: Record<string, { delivered: boolean; deliveredAt?: string }>;
@@ -103,6 +105,95 @@ export function Dashboard() {
       return;
     }
     await load();
+  }
+
+  async function testDiscordEmail() {
+    if (!adminToken) {
+      alert('Please enter your admin token first');
+      return;
+    }
+
+    const testEmail = prompt('Enter email address to test:');
+    if (!testEmail) {
+      return;
+    }
+
+    const testName = prompt('Enter name (optional, press Enter to use email):') || testEmail;
+
+    setTestingDiscordEmail(true);
+    try {
+      const res = await fetch(`${API_BASE}/test-discord-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ email: testEmail, name: testName }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(`Error: ${data.error || 'Failed to send test email'}`);
+        return;
+      }
+
+      alert(`✅ Test email sent successfully to ${testEmail}!\n\nCheck your inbox for the Discord update email.`);
+    } catch (err: any) {
+      alert(`Error: ${err.message || 'Failed to send test email'}`);
+    } finally {
+      setTestingDiscordEmail(false);
+    }
+  }
+
+  async function sendDiscordUpdate() {
+    if (!adminToken) {
+      alert('Please enter your admin token first');
+      return;
+    }
+
+    const confirmMsg = `Send Discord link update email to all delivered emails?\n\n` +
+      `This will send the updated Discord link to all applicants who received the acceptance email.\n\n` +
+      `Note: This may take a few minutes to complete.`;
+    
+    if (!confirm(confirmMsg)) {
+      return;
+    }
+
+    setSendingDiscordUpdate(true);
+    try {
+      const res = await fetch(`${API_BASE}/send-discord-update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(`Error: ${data.error || 'Failed to send Discord update emails'}`);
+        return;
+      }
+
+      const message = `Discord update email sent!\n\n` +
+        `Total delivered emails (from acceptance): ${data.originalDeliveredCount || data.total}\n` +
+        `Successfully sent: ${data.sent}\n` +
+        `Failed: ${data.failed}\n` +
+        `Verified delivered (Discord update): ${data.verifiedDelivered || data.discordDeliveredCount || 0}\n` +
+        `Coverage: ${data.coverage || 0}%\n` +
+        `Missing deliveries: ${data.missingDeliveries || 0}`;
+
+      if (data.errors && data.errors.length > 0) {
+        alert(message + `\n\nErrors:\n${data.errors.map((e: any) => `- ${e.email}: ${e.error}`).join('\n')}`);
+      } else if (data.missingEmails && data.missingEmails.length > 0) {
+        alert(message + `\n\n⚠️ Missing deliveries:\n${data.missingEmails.slice(0, 10).join('\n')}${data.missingEmails.length > 10 ? `\n... and ${data.missingEmails.length - 10} more` : ''}`);
+      } else {
+        alert(message);
+      }
+
+      // Refresh to show updated status
+      await load();
+    } catch (err: any) {
+      alert(`Error: ${err.message || 'Failed to send Discord update emails'}`);
+    } finally {
+      setSendingDiscordUpdate(false);
+    }
   }
 
   async function checkEmailDelivery(emails: string[]): Promise<void> {
@@ -263,6 +354,38 @@ export function Dashboard() {
           }}
         >
           {batchAdmitting ? 'Admitting…' : 'Admit All on Page'}
+        </button>
+        <button 
+          onClick={testDiscordEmail} 
+          disabled={!adminToken || loading || testingDiscordEmail}
+          style={{
+            backgroundColor: '#99AAB5',
+            color: 'white',
+            border: 'none',
+            padding: '8px 16px',
+            borderRadius: 4,
+            cursor: testingDiscordEmail || loading || !adminToken ? 'not-allowed' : 'pointer',
+            opacity: testingDiscordEmail || loading || !adminToken ? 0.6 : 1,
+            fontWeight: 600
+          }}
+        >
+          {testingDiscordEmail ? 'Sending…' : 'Test Discord Email'}
+        </button>
+        <button 
+          onClick={sendDiscordUpdate} 
+          disabled={!adminToken || loading || sendingDiscordUpdate}
+          style={{
+            backgroundColor: '#5865F2',
+            color: 'white',
+            border: 'none',
+            padding: '8px 16px',
+            borderRadius: 4,
+            cursor: sendingDiscordUpdate || loading || !adminToken ? 'not-allowed' : 'pointer',
+            opacity: sendingDiscordUpdate || loading || !adminToken ? 0.6 : 1,
+            fontWeight: 600
+          }}
+        >
+          {sendingDiscordUpdate ? 'Sending…' : 'Send Discord Update'}
         </button>
         <span style={{ marginLeft: 'auto' }}>
           Page {currentPage} of {totalPages} | Total: {total}
