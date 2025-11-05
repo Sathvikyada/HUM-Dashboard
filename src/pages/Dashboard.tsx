@@ -149,9 +149,11 @@ export function Dashboard() {
       return;
     }
 
-    const confirmMsg = `Send Discord link update email to all delivered emails?\n\n` +
-      `This will send the updated Discord link to all applicants who received the acceptance email.\n\n` +
-      `Note: This may take a few minutes to complete.`;
+    const confirmMsg = `Send Discord link update email to missing recipients?\n\n` +
+      `This will send the updated Discord link to applicants who received the acceptance email but haven't received the Discord update yet.\n\n` +
+      `Note: Emails are sent in batches of 20 with 1 minute delay between batches.\n` +
+      `This may take ${Math.ceil(778 / 20)}-${Math.ceil(778 / 20) + 5} minutes to complete.\n\n` +
+      `Please keep this tab open until completion.`;
     
     if (!confirm(confirmMsg)) {
       return;
@@ -159,6 +161,12 @@ export function Dashboard() {
 
     setSendingDiscordUpdate(true);
     try {
+      // Show progress message
+      const progressMsg = `Sending Discord update emails...\n\n` +
+        `This will take several minutes. Please keep this tab open.\n\n` +
+        `You can check the browser console for detailed progress updates.`;
+      alert(progressMsg);
+
       const res = await fetch(`${API_BASE}/send-discord-update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
@@ -171,23 +179,40 @@ export function Dashboard() {
         return;
       }
 
+      // Build detailed message with progress
+      let message = `Discord update email sending complete!\n\n`;
+      
+      if (data.progress && data.progress.length > 0) {
+        message += `Progress by batch:\n`;
+        data.progress.slice(-5).forEach((p: any) => {
+          message += `  Batch ${p.batch}: ${p.sent} sent, ${p.failed} failed\n`;
+        });
+        message += `\n`;
+      }
+
       const verification = data.verification || {};
-      const message = `Discord update email sent!\n\n` +
-        `Original list: ${verification.originalListCount || data.total || 0} emails\n` +
-        `Attempted to send: ${data.sent}\n` +
-        `Failed to send: ${data.failed}\n` +
-        `Verified delivered: ${verification.verifiedDelivered || data.verifiedDelivered || 0}\n` +
-        `Missing deliveries: ${verification.missingDeliveries || data.missingDeliveries || 0}\n` +
-        `Coverage: ${verification.coverage || data.coverage || 0}%\n` +
-        `All covered: ${verification.allCovered ? '✅ Yes' : '❌ No'}`;
+      message += `Summary:\n` +
+        `  Total emails: ${verification.originalListCount || data.total || 0}\n` +
+        `  Successfully sent: ${data.sent}\n` +
+        `  Failed to send: ${data.failed}\n` +
+        `  Verified delivered: ${verification.verifiedDelivered || 0}\n` +
+        `  Missing deliveries: ${verification.missingDeliveries || 0}\n` +
+        `  Coverage: ${verification.coverage || 0}%\n` +
+        `  All covered: ${verification.allCovered ? '✅ Yes' : '❌ No'}`;
 
       if (data.errors && data.errors.length > 0) {
-        alert(message + `\n\nErrors:\n${data.errors.map((e: any) => `- ${e.email}: ${e.error}`).join('\n')}`);
+        message += `\n\nErrors (showing first 5):\n${data.errors.slice(0, 5).map((e: any) => `- ${e.email}: ${e.error}`).join('\n')}`;
+        if (data.errors.length > 5) {
+          message += `\n... and ${data.errors.length - 5} more errors`;
+        }
       } else if (verification.missingEmails && verification.missingEmails.length > 0) {
-        alert(message + `\n\n⚠️ Missing deliveries:\n${verification.missingEmails.slice(0, 10).join('\n')}${verification.missingEmails.length > 10 ? `\n... and ${verification.missingEmails.length - 10} more` : ''}`);
-      } else {
-        alert(message);
+        message += `\n\n⚠️ Missing deliveries (showing first 10):\n${verification.missingEmails.slice(0, 10).join('\n')}`;
+        if (verification.missingEmails.length > 10) {
+          message += `\n... and ${verification.missingEmails.length - 10} more`;
+        }
       }
+
+      alert(message);
 
       // Refresh to show updated status
       await load();

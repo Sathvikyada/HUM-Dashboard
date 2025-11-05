@@ -12,12 +12,31 @@ export const handler: Handler = async (event) => {
       return { statusCode: 405, body: 'Method Not Allowed' };
     }
 
-    // Try to read from delivered-emails-list.txt file first
+    // Try to read from missing-discord-updates.txt first (emails that need Discord update)
+    // If not found, try delivered-emails-list.txt as fallback
+    const missingFile = path.join(process.cwd(), 'missing-discord-updates.txt');
     const listFile = path.join(process.cwd(), 'delivered-emails-list.txt');
     let emailsToUse = new Set<string>();
     let emailToName = new Map<string, string>();
 
-    if (fs.existsSync(listFile)) {
+    if (fs.existsSync(missingFile)) {
+      console.log('📄 Reading from missing-discord-updates.txt file (emails that need Discord update)...');
+      const fileContent = fs.readFileSync(missingFile, 'utf-8');
+      const lines = fileContent.split('\n').filter(line => {
+        const trimmed = line.trim();
+        return trimmed && !trimmed.startsWith('#') && trimmed.includes('|');
+      });
+
+      lines.forEach(line => {
+        const [email, name] = line.split('|').map(s => s.trim());
+        if (email) {
+          emailsToUse.add(email.toLowerCase());
+          emailToName.set(email.toLowerCase(), name || email);
+        }
+      });
+
+      console.log(`📧 Loaded ${emailsToUse.size} missing emails from file`);
+    } else if (fs.existsSync(listFile)) {
       console.log('📄 Reading from delivered-emails-list.txt file...');
       const fileContent = fs.readFileSync(listFile, 'utf-8');
       const lines = fileContent.split('\n').filter(line => {
@@ -128,15 +147,27 @@ export const handler: Handler = async (event) => {
       sent: 0,
       failed: 0,
       errors: [] as Array<{ email: string; error: string }>,
+      progress: [] as Array<{ batch: number; sent: number; failed: number; total: number; timestamp: string }>,
     };
 
-    // Process in batches of 10 to avoid rate limits
-    const BATCH_SIZE = 10;
+    // Process in batches of 20 with 1 minute delay between batches
+    const BATCH_SIZE = 20;
+    const BATCH_DELAY = 60000; // 1 minute in milliseconds
+    const totalBatches = Math.ceil(emails.length / BATCH_SIZE);
+
+    console.log(`📧 Starting to send ${emails.length} emails in ${totalBatches} batches of ${BATCH_SIZE}`);
+    console.log(`⏱️  Delay between batches: ${BATCH_DELAY / 1000} seconds (${BATCH_DELAY / 60000} minute)`);
+    console.log(`⏰ Estimated time: ~${Math.ceil(totalBatches * BATCH_DELAY / 60000)} minutes\n`);
+
     for (let i = 0; i < emails.length; i += BATCH_SIZE) {
+      const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
       const batch = emails.slice(i, i + BATCH_SIZE);
+      const batchStartTime = Date.now();
+      
+      console.log(`📦 Batch ${batchNumber}/${totalBatches}: Processing ${batch.length} emails...`);
       
       // Send emails in parallel within batch
-      await Promise.all(
+      const batchResults = await Promise.allSettled(
         batch.map(async (email) => {
           try {
             const name = emailToName.get(email) || email;
@@ -144,25 +175,69 @@ export const handler: Handler = async (event) => {
               to: email,
               name,
             });
-            results.sent++;
+            return { success: true, email };
           } catch (err: any) {
-            results.failed++;
-            results.errors.push({
-              email,
-              error: err.message || 'Unknown error',
-            });
+            return { success: false, email, error: err.message || 'Unknown error' };
           }
         })
       );
 
-      // Small delay between batches to avoid rate limits
+      // Process batch results
+      let batchSent = 0;
+      let batchFailed = 0;
+      batchResults.forEach((result) => {
+        if (result.status === 'fulfilled') {
+          if (result.value.success) {
+            results.sent++;
+            batchSent++;
+          } else {
+            results.failed++;
+            batchFailed++;
+            results.errors.push({
+              email: result.value.email,
+              error: result.value.error || 'Unknown error',
+            });
+          }
+        } else {
+          results.failed++;
+          batchFailed++;
+          results.errors.push({
+            email: 'unknown',
+            error: result.reason?.message || 'Unknown error',
+          });
+        }
+      });
+
+      const batchDuration = Date.now() - batchStartTime;
+      const progress = {
+        batch: batchNumber,
+        sent: batchSent,
+        failed: batchFailed,
+        total: batch.length,
+        timestamp: new Date().toISOString(),
+      };
+      results.progress.push(progress);
+
+      console.log(`   ✅ Batch ${batchNumber} complete: ${batchSent} sent, ${batchFailed} failed (${Math.round(batchDuration / 1000)}s)`);
+      console.log(`   📊 Overall progress: ${results.sent}/${emails.length} sent (${Math.round((results.sent / emails.length) * 100)}%)`);
+
+      // Wait 1 minute before next batch (except for the last batch)
       if (i + BATCH_SIZE < emails.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        console.log(`   ⏳ Waiting ${BATCH_DELAY / 1000} seconds before next batch...\n`);
+        await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
+      } else {
+        console.log('');
       }
     }
 
     const sendingDuration = Date.now() - startTime;
-    console.log(`📧 Sent ${results.sent} emails in ${Math.round(sendingDuration / 1000)} seconds`);
+    const durationMinutes = Math.round(sendingDuration / 60000);
+    const durationSeconds = Math.round((sendingDuration % 60000) / 1000);
+    console.log(`\n✅ Completed sending emails!`);
+    console.log(`   📧 Total sent: ${results.sent}/${emails.length}`);
+    console.log(`   ❌ Total failed: ${results.failed}`);
+    console.log(`   ⏱️  Duration: ${durationMinutes}m ${durationSeconds}s`);
+    console.log(`   📊 Success rate: ${Math.round((results.sent / emails.length) * 100)}%\n`);
 
     // Verify delivery by checking email_logs after a short delay
     // Wait a bit longer for webhook events to arrive (10 seconds minimum, or 5 seconds after sending completes)
