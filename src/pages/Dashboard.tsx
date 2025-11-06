@@ -29,6 +29,16 @@ export function Dashboard() {
   const [batchAdmitting, setBatchAdmitting] = React.useState(false);
   const [sendingTravelStipend, setSendingTravelStipend] = React.useState(false);
   const [testingTravelStipendEmail, setTestingTravelStipendEmail] = React.useState(false);
+  const [sendingDiscordUpdate, setSendingDiscordUpdate] = React.useState(false);
+  const [discordUpdateStatus, setDiscordUpdateStatus] = React.useState<{
+    currentPage: number;
+    totalPages: number;
+    totalEmails: number;
+    sent: number;
+    failed: number;
+    errors: Array<{ email: string; error: string }>;
+    sentDetails: Array<{ email: string; name: string }>;
+  } | null>(null);
   const [travelStipendStatus, setTravelStipendStatus] = React.useState<{
     total: number;
     sent: number;
@@ -178,6 +188,103 @@ export function Dashboard() {
       alert(`Error: ${err.message || 'Failed to send test email'}`);
     } finally {
       setTestingTravelStipendEmail(false);
+    }
+  }
+
+  async function sendDiscordUpdatePage() {
+    if (!adminToken) {
+      alert('Please enter your admin token first');
+      return;
+    }
+
+    // Get emails from current page applicants
+    const currentPageEmails = items.map(item => item.email.toLowerCase());
+    
+    if (currentPageEmails.length === 0) {
+      alert('No applicants on this page to send emails to');
+      return;
+    }
+
+    setSendingDiscordUpdate(true);
+    
+    try {
+      const res = await fetch(`${API_BASE}/send-discord-update-page`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ emails: currentPageEmails }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(`Error: ${data.error || 'Failed to send Discord update emails'}`);
+        return;
+      }
+
+      // Update status
+      setDiscordUpdateStatus({
+        currentPage: 1,
+        totalPages: 1,
+        totalEmails: data.totalOnPage || 0,
+        sent: data.sent || 0,
+        failed: data.failed || 0,
+        errors: data.errors || [],
+        sentDetails: data.sentDetails || [],
+      });
+
+      const message = `Discord update emails sent!\n\n` +
+        `Applicants on this page: ${data.totalOnPage || 0}\n` +
+        `In email list: ${data.inList || 0}\n` +
+        `Successfully sent: ${data.sent}\n` +
+        `Skipped (not in list): ${data.skipped || 0}\n` +
+        `Failed: ${data.failed}`;
+
+      if (data.errors && data.errors.length > 0) {
+        alert(message + `\n\nErrors:\n${data.errors.slice(0, 5).map((e: any) => `- ${e.email}: ${e.error}`).join('\n')}`);
+      } else {
+        alert(message);
+      }
+
+      // Start polling for email delivery status
+      if (data.sentDetails && data.sentDetails.length > 0) {
+        const sentEmails = data.sentDetails.map((d: any) => d.email);
+        
+        // Clear any existing polling interval
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+
+        const duration = 180000; // 3 minutes
+        const interval = 3000; // Check every 3 seconds
+
+        // Initial check
+        await checkEmailDelivery(sentEmails);
+
+        // Poll every 3 seconds for 3 minutes
+        let pollCount = 0;
+        const maxPolls = duration / interval; // 60 polls over 3 minutes
+        
+        pollIntervalRef.current = setInterval(() => {
+          pollCount++;
+          
+          if (pollCount >= maxPolls) {
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+            }
+            setDeliveryStatus(prev => prev ? { ...prev, polling: false } : null);
+            return;
+          }
+          
+          checkEmailDelivery(sentEmails).catch(console.error);
+        }, interval);
+      }
+
+    } catch (err: any) {
+      alert(`Error: ${err.message || 'Failed to send Discord update emails'}`);
+    } finally {
+      setSendingDiscordUpdate(false);
     }
   }
 
@@ -455,6 +562,22 @@ export function Dashboard() {
         >
           {sendingTravelStipend ? 'Sending…' : 'Send Travel Stipend Emails'}
         </button>
+        <button 
+          onClick={sendDiscordUpdatePage} 
+          disabled={!adminToken || loading || sendingDiscordUpdate || items.length === 0}
+          style={{
+            backgroundColor: '#5865F2',
+            color: 'white',
+            border: 'none',
+            padding: '8px 16px',
+            borderRadius: 4,
+            cursor: sendingDiscordUpdate || loading || !adminToken || items.length === 0 ? 'not-allowed' : 'pointer',
+            opacity: sendingDiscordUpdate || loading || !adminToken || items.length === 0 ? 0.6 : 1,
+            fontWeight: 600
+          }}
+        >
+          {sendingDiscordUpdate ? 'Sending…' : 'Send Discord Update (This Page)'}
+        </button>
         <span style={{ marginLeft: 'auto' }}>
           Page {currentPage} of {totalPages} | Total: {total}
         </span>
@@ -523,6 +646,99 @@ export function Dashboard() {
         </div>
       )}
 
+
+      {discordUpdateStatus && (
+        <div style={{
+          marginTop: 24,
+          padding: 16,
+          backgroundColor: '#e8f4f8',
+          borderRadius: 8,
+          border: '1px solid #5865F2'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: 18, color: '#5865F2' }}>💬 Discord Update Email Status</h3>
+            <div style={{ fontSize: 14, color: '#666' }}>
+              ✅ {discordUpdateStatus.sent} sent | ❌ {discordUpdateStatus.failed} failed
+            </div>
+          </div>
+
+          {discordUpdateStatus.sentDetails.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: '#333' }}>
+                ✅ Sent Emails ({discordUpdateStatus.sentDetails.length}):
+              </div>
+              <div style={{ 
+                maxHeight: 300, 
+                overflowY: 'auto',
+                fontSize: 12,
+                fontFamily: 'monospace',
+                backgroundColor: '#ffffff',
+                padding: 8,
+                borderRadius: 4,
+                border: '1px solid #ddd'
+              }}>
+                {discordUpdateStatus.sentDetails.map((detail, idx) => (
+                  <div 
+                    key={idx}
+                    style={{ 
+                      padding: '6px 8px',
+                      marginBottom: 4,
+                      backgroundColor: '#e8f5e9',
+                      borderRadius: 4,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <span style={{ color: '#2e7d32', fontWeight: 600 }}>{detail.name}</span>
+                    <span style={{ color: '#666', marginLeft: 8 }}>{detail.email}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {discordUpdateStatus.errors.length > 0 && (
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: '#d32f2f' }}>
+                ❌ Errors ({discordUpdateStatus.errors.length}):
+              </div>
+              <div style={{ 
+                maxHeight: 200, 
+                overflowY: 'auto',
+                fontSize: 12,
+                fontFamily: 'monospace',
+                backgroundColor: '#ffffff',
+                padding: 8,
+                borderRadius: 4,
+                border: '1px solid #ddd'
+              }}>
+                {discordUpdateStatus.errors.map((error, idx) => (
+                  <div 
+                    key={idx}
+                    style={{ 
+                      padding: '6px 8px',
+                      marginBottom: 4,
+                      backgroundColor: '#ffebee',
+                      borderRadius: 4,
+                      borderLeft: '3px solid #d32f2f'
+                    }}
+                  >
+                    <div style={{ color: '#d32f2f', fontWeight: 600 }}>{error.email}</div>
+                    <div style={{ color: '#666', fontSize: 11, marginTop: 2 }}>{error.error}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginTop: 16, padding: 12, backgroundColor: '#ffffff', borderRadius: 4, border: '1px solid #ddd' }}>
+            <div style={{ fontSize: 13, color: '#333', lineHeight: 1.6 }}>
+              <strong>Note:</strong> Emails are only sent to applicants on this page that are also in the generated email list (delivered acceptance emails, excluding denied).
+            </div>
+          </div>
+        </div>
+      )}
 
       {travelStipendStatus && (
         <div style={{

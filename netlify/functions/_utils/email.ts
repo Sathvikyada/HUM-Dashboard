@@ -212,6 +212,112 @@ The HackUMass Team`;
   }
 }
 
+export async function sendDiscordUpdateEmail(params: {
+  to: string;
+  name: string;
+}): Promise<void> {
+  if (!sendgridApiKey) throw new Error('Missing SENDGRID_API_KEY');
+  if (!emailFrom) throw new Error('Missing EMAIL_FROM environment variable');
+
+  const escapedName = escapeHtml(params.name);
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { margin:0; padding:0; background-color:#f5f5f5; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; }
+    img { border:none; display:block; }
+  </style>
+</head>
+<body>
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f5f5;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+          <!-- Logo -->
+          <tr>
+            <td align="center" style="padding:40px;background-color:#000;">
+              ${
+                emailLogoUrl
+                  ? `<img src="${emailLogoUrl}" alt="HackUMass Logo" style="max-width:200px;height:auto;margin:0 auto;">`
+                  : `<h1 style="color:#4CAF50;font-size:40px;">HackUMass</h1>`
+              }
+            </td>
+          </tr>
+
+          <!-- Message -->
+          <tr>
+            <td style="padding:40px 40px 30px;">
+              <p style="margin:0 0 20px;font-size:16px;color:#333;">Dear ${escapedName},</p>
+              <p style="margin:0 0 20px;font-size:16px;color:#333;">Please make sure to join the discord to recieve the latest updates during the hackathon.</p>
+              <p style="margin:0 0 20px;font-size:16px;color:#333;">If you are unable to access the Discord using the link provided to you in the previous link or if the Discord invite expired, please use the following link to join the HackUMass XIII Discord Server:</p>
+              <p style="margin:0 0 20px;font-size:16px;color:#333;">
+                <a href="https://discord.gg/YZshAc5GH9" style="color:#4CAF50;font-weight:600;text-decoration:none;">https://discord.gg/YZshAc5GH9</a>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:30px 40px;background-color:#f9f9f9;border-top:1px solid #eee;text-align:center;">
+              <p style="margin:0;font-size:14px;color:#666;">Best regards,<br><strong style="color:#4CAF50;">The HackUMass Team</strong></p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+
+  const text = `Dear ${params.name},
+
+Please make sure to join the discord to recieve the latest updates during the hackathon.
+
+If you are unable to access the Discord using the link provided to you in the previous link or if the Discord invite expired, please use the following link to join the HackUMass XIII Discord Server:
+
+https://discord.gg/YZshAc5GH9
+
+Best regards,
+The HackUMass Team`;
+
+  const msg: any = {
+    from: emailFrom,
+    to: params.to,
+    bcc: adminEmail,
+    replyTo: 'team@hackumass.com',
+    subject: 'HackUMass XIII - Discord Server Update',
+    html,
+    text,
+    trackingSettings: {
+      clickTracking: { enable: false },
+      openTracking: { enable: false },
+    },
+    headers: { 'X-Entity-Ref-ID': 'discord-update-' + Date.now() },
+  };
+
+  try {
+    const [response] = await sgMail.send(msg);
+    const statusCode = response?.statusCode || 0;
+
+    if (statusCode >= 200 && statusCode < 300) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`✅ Discord update email sent to ${params.to} - Status: ${statusCode}`);
+      }
+    } else {
+      console.error(`⚠️ Unexpected status code: ${statusCode}`);
+      throw new Error(`SendGrid returned status ${statusCode}`);
+    }
+  } catch (error: any) {
+    console.error('❌ SendGrid error:', error.response?.body || error.message);
+    throw error;
+  }
+}
+
 export async function sendTravelStipendEmail(params: {
   to: string;
   name: string;
