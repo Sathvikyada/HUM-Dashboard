@@ -182,7 +182,7 @@ Congratulations! You've been accepted to participate in HackUMass.
 
 The check-in and opening ceremony will begin at 6:30 PM at the Campus Center Auditorium (1 Campus Center Way, Amherst, MA 01002). The event is from November 7th to 9th, 2025 at the Integrative Learning Center (ILC).
 
-In order to participate, make sure you join our Discord (https://discord.gg/bATf3zC2)! There, you will find more information about the event. If you have any questions please visit our website at https://hackumass.com/.
+In order to participate, make sure you join our Discord (https://discord.gg/YZshAc5GH9)! There, you will find more information about the event. If you have any questions please visit our website at https://hackumass.com/.
 
 If you cannot find your answer on our website, then please feel free to shoot us an email at team@hackumass.com
 
