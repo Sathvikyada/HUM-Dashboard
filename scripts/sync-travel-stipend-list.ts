@@ -20,14 +20,14 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
 
 async function syncTravelStipendList() {
   try {
-    const xlsxPath = path.join(process.cwd(), 'Travel Stipend Final List.xlsx');
+    const xlsxPath = path.join(process.cwd(), 'Travel Stipend Final List (3).xlsx');
     
     if (!fs.existsSync(xlsxPath)) {
       console.error(`❌ File not found: ${xlsxPath}`);
       process.exit(1);
     }
 
-    console.log('📂 Reading Travel Stipend Final List.xlsx...\n');
+    console.log('📂 Reading Travel Stipend Final List (3).xlsx...\n');
     const workbook = XLSX.readFile(xlsxPath);
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(worksheet, { raw: false }) as Array<Record<string, any>>;
@@ -61,12 +61,59 @@ async function syncTravelStipendList() {
       }
 
       try {
-        // Check if applicant exists
-        const { data: existingApplicant, error: fetchError } = await supabase
+        // Check if applicant exists - use case-insensitive email lookup first
+        let { data: existingApplicant, error: fetchError } = await supabase
           .from('applicants')
           .select('id, email, full_name, status, responses')
-          .eq('email', email)
-          .single();
+          .ilike('email', email)
+          .maybeSingle();
+
+        // If not found and we have a name, try name-based lookup as fallback
+        if ((fetchError || !existingApplicant) && fullName && fullName !== email) {
+          console.log(`⚠️  Email not found for ${email}, trying name-based lookup for "${fullName}"...`);
+          
+          // Try multiple name matching strategies
+          const nameParts = fullName.trim().split(/\s+/);
+          const firstName = nameParts[0];
+          const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
+          
+          let nameMatch = null;
+          
+          // Strategy 1: First and last name
+          if (firstName && lastName) {
+            const { data: match1, error: nameError1 } = await supabase
+              .from('applicants')
+              .select('id, email, full_name, status, responses')
+              .ilike('full_name', `%${firstName}%`)
+              .ilike('full_name', `%${lastName}%`)
+              .maybeSingle();
+            
+            if (!nameError1 && match1) {
+              nameMatch = match1;
+            }
+          }
+          
+          // Strategy 2: Just first name (if first strategy didn't work)
+          if (!nameMatch && firstName) {
+            const { data: match2, error: nameError2 } = await supabase
+              .from('applicants')
+              .select('id, email, full_name, status, responses')
+              .ilike('full_name', `${firstName}%`)
+              .maybeSingle();
+            
+            if (!nameError2 && match2) {
+              nameMatch = match2;
+            }
+          }
+          
+          if (nameMatch) {
+            console.log(`✅ Found by name: ${nameMatch.full_name} (${nameMatch.email}) - Excel had: ${email}`);
+            existingApplicant = nameMatch;
+            fetchError = null;
+          } else {
+            console.log(`❌ Name-based lookup also failed for "${fullName}"`);
+          }
+        }
 
         const travelStipendData = {
           proof,
@@ -74,72 +121,115 @@ async function syncTravelStipendList() {
           general_early_app: generalEarlyApp,
         };
 
+        const isEarly = generalEarlyApp.toLowerCase() === 'early';
+        const isGeneral = generalEarlyApp.toLowerCase() === 'general';
+
         if (fetchError || !existingApplicant) {
-          // New applicant - add them regardless of Early/General if not found
-          // Create new applicant with pending status
-          const responses: Record<string, any> = {
-            ...travelStipendData,
-          };
+          // Applicant doesn't exist in database
+          if (isEarly) {
+            // Early: Add new applicant with full name, email, proof, and stipend amount
+            const responses: Record<string, any> = {
+              ...travelStipendData,
+            };
 
-          const { error: insertError } = await supabase
-            .from('applicants')
-            .insert({
-              email,
-              full_name: fullName || email,
-              status: 'pending',
-              responses,
-            });
+            const { error: insertError } = await supabase
+              .from('applicants')
+              .insert({
+                email,
+                full_name: fullName || email,
+                status: 'pending',
+                responses,
+              });
 
-          if (insertError) {
-            results.errors.push({
-              email,
-              error: insertError.message,
-            });
-          } else {
-            const appType = generalEarlyApp.toLowerCase() === 'early' ? 'Early App (new)' : 'General App (new)';
-            results.newApplicants.push({
+            if (insertError) {
+              results.errors.push({
+                email,
+                error: insertError.message,
+              });
+            } else {
+              results.newApplicants.push({
+                email,
+                name: fullName || email,
+                type: 'Early App (new)',
+              });
+            }
+          } else if (isGeneral) {
+            // General: Skip if applicant doesn't exist (General implies they should already exist)
+            results.skipped.push({
               email,
               name: fullName || email,
-              type: appType,
+              reason: 'General applicant not found in database (General applicants should already exist)',
+            });
+          } else {
+            // Unknown type, skip
+            results.skipped.push({
+              email,
+              name: fullName || email,
+              reason: `Unknown General/Early App value: "${generalEarlyApp}"`,
             });
           }
         } else {
-          // Existing applicant - update with travel stipend data if pending
-          // Verify applicant is pending before updating
-          if (existingApplicant.status !== 'pending') {
+          // Applicant exists in database
+          if (isEarly) {
+            // Early: Update existing applicant's responses.json with proof and stipend amount
+            const existingResponses = existingApplicant.responses || {};
+            const updatedResponses = {
+              ...existingResponses,
+              ...travelStipendData,
+            };
+
+            const { error: updateError } = await supabase
+              .from('applicants')
+              .update({
+                responses: updatedResponses,
+              })
+              .eq('id', existingApplicant.id);
+
+            if (updateError) {
+              results.errors.push({
+                email,
+                error: updateError.message,
+              });
+            } else {
+              results.updatedApplicants.push({
+                email,
+                name: existingApplicant.full_name || email,
+                type: 'Early App (updated)',
+              });
+            }
+          } else if (isGeneral) {
+            // General: Update existing applicant's responses.json with proof and stipend amount
+            const existingResponses = existingApplicant.responses || {};
+            const updatedResponses = {
+              ...existingResponses,
+              ...travelStipendData,
+            };
+
+            const { error: updateError } = await supabase
+              .from('applicants')
+              .update({
+                responses: updatedResponses,
+              })
+              .eq('id', existingApplicant.id);
+
+            if (updateError) {
+              results.errors.push({
+                email,
+                error: updateError.message,
+              });
+            } else {
+              results.updatedApplicants.push({
+                email,
+                name: existingApplicant.full_name || email,
+                type: 'General App (updated)',
+              });
+            }
+          } else {
+            // Unknown type, skip
             results.skipped.push({
               email,
               name: existingApplicant.full_name || email,
-              reason: `Status is "${existingApplicant.status}" (must be pending to update)`,
-            });
-            continue;
-          }
-
-          // Merge travel stipend data into existing responses
-          const existingResponses = existingApplicant.responses || {};
-          const updatedResponses = {
-            ...existingResponses,
-            ...travelStipendData,
-          };
-
-          const { error: updateError } = await supabase
-            .from('applicants')
-            .update({
-              responses: updatedResponses,
-            })
-            .eq('id', existingApplicant.id);
-
-          if (updateError) {
-            results.errors.push({
-              email,
-              error: updateError.message,
-            });
-          } else {
-            const appType = generalEarlyApp.toLowerCase() === 'early' ? 'Early App (updated)' : 'General App (updated)';
-            results.updatedApplicants.push({
-              email,
-              name: existingApplicant.full_name || email,
-              type: appType,
+              reason: `Unknown General/Early App value: "${generalEarlyApp}"`,
             });
           }
         }
@@ -240,36 +330,40 @@ async function syncTravelStipendList() {
       console.log('');
     }
 
-    // Verify that only pending/new applications were modified
+    // Verify new applicants are pending
     console.log('='.repeat(80));
     console.log('🔍 VERIFICATION');
     console.log('='.repeat(80));
     
-    const allModifiedEmails = [
-      ...results.newApplicants.map(a => a.email),
-      ...results.updatedApplicants.map(a => a.email),
-    ];
+    const newApplicantEmails = results.newApplicants.map(a => a.email);
+    const updatedApplicantEmails = results.updatedApplicants.map(a => a.email);
 
-    if (allModifiedEmails.length > 0) {
-      const { data: modifiedApplicants, error: verifyError } = await supabase
+    if (newApplicantEmails.length > 0) {
+      const { data: newApplicants, error: verifyError } = await supabase
         .from('applicants')
         .select('email, full_name, status')
-        .in('email', allModifiedEmails);
+        .in('email', newApplicantEmails);
 
-      if (!verifyError && modifiedApplicants) {
-        const nonPending = modifiedApplicants.filter(a => a.status !== 'pending');
+      if (!verifyError && newApplicants) {
+        const nonPending = newApplicants.filter(a => a.status !== 'pending');
         
         if (nonPending.length === 0) {
-          console.log(`\n✅ SUCCESS: All ${allModifiedEmails.length} modified applicants are pending!\n`);
+          console.log(`\n✅ SUCCESS: All ${newApplicantEmails.length} new applicants are pending!\n`);
         } else {
-          console.log(`\n⚠️  WARNING: ${nonPending.length} modified applicants are NOT pending:\n`);
+          console.log(`\n⚠️  WARNING: ${nonPending.length} new applicants are NOT pending:\n`);
           nonPending.forEach(app => {
             console.log(`   - ${app.full_name || app.email} (${app.email}): ${app.status}`);
           });
           console.log('');
         }
       }
-    } else {
+    }
+
+    if (updatedApplicantEmails.length > 0) {
+      console.log(`\n✅ Updated ${updatedApplicantEmails.length} existing applicants with travel stipend data.\n`);
+    }
+
+    if (newApplicantEmails.length === 0 && updatedApplicantEmails.length === 0) {
       console.log('\nℹ️  No applicants were modified.\n');
     }
 

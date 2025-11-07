@@ -1,11 +1,11 @@
 Travel Stipend Sync Log
-Generated: 2025-11-05T19:32:56.158Z
-Total rows processed: 52
+Generated: 2025-11-07T03:46:47.332Z
+Total rows processed: 62
 
 === SUMMARY ===
 New applicants added: 0
-Existing applicants updated: 52
-Skipped: 0
+Existing applicants updated: 61
+Skipped: 1
 Errors: 0
 
 === EXISTING APPLICANTS UPDATED ===
@@ -52,13 +52,25 @@ Errors: 0
 41. Dennis Liu (liu.denn@northeastern.edu) - General App (updated)
 42. Benjamin Santana (basantana@wpi.edu) - General App (updated)
 43. Alexander McGreevy (mcgreevy.a@northeastern.edu) - General App (updated)
-44. Kelby Chau (kelbychau11204@gmail.com) - General App (updated)
-45. Zayeed Bin Kabir (zayeedbinkabir@gmail.com) - General App (updated)
-46. Gianna Tan (gltan9265@gmail.com) - General App (updated)
-47. Luis Mendez (luis.a.mendez@uconn.edu) - Early App (updated)
-48. Siddharth Singh (siddsingh@cs.stonybrook.edu) - General App (updated)
-49. Ardi Dauti (ardidauti6@gmail.com) - General App (updated)
-50. Denali Schlesinger (dsch28@bu.edu) - General App (updated)
-51. Riwaz Shrestha (riwaz@bu.edu) - General App (updated)
-52. Sathvik Yadanaparthi (sathvikyadanaparthicoder@gmail.com) - General App (updated)
+44. Zayeed Bin Kabir (zayeedbinkabir@gmail.com) - General App (updated)
+45. Gianna Tan (gltan9265@gmail.com) - General App (updated)
+46. Luis Mendez (luis.a.mendez@uconn.edu) - Early App (updated)
+47. Siddharth Singh (siddsingh@cs.stonybrook.edu) - General App (updated)
+48. Ardi Dauti (ardidauti6@gmail.com) - General App (updated)
+49. Denali Schlesinger (dsch28@bu.edu) - General App (updated)
+50. Riwaz Shrestha (riwaz@bu.edu) - General App (updated)
+51. Sathvik Yadanaparthi (sathvikyadanaparthicoder@gmail.com) - General App (updated)
+52. Lucian Dupont - LeBlanc (dupontlucian@gmail.com) - General App (updated)
+53. Sean Deegan (seandeegan2000@gmail.com) - General App (updated)
+54. Jeremy Burke (jb605077@wne.edu) - General App (updated)
+55. Ezria Joe (ezria.joe@baruchmail.cuny.edu) - Early App (updated)
+56. Kyle Chiem (kyle.chiem@outlook.com) - General App (updated)
+57. Prakhar Singh (pps5577@psu.edu) - General App (updated)
+58. Aidan Butler (ab620589@wne.edu) - General App (updated)
+59. Abhinav Chavali (abhinavchavali12@gmail.com) - General App (updated)
+60. Justin Gould (jdawgg911@gmail.com) - General App (updated)
+61. Leo Lu (lbl5561@psu.edu) - General App (updated)
+
+=== SKIPPED ===
+1. Kelby Chau (kelbychau11204@gmail.com) - General applicant not found in database (General applicants should already exist)
 

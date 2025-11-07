@@ -3,6 +3,46 @@ import { supabaseAdmin } from './_utils/supabaseClient';
 
 type MealType = 'sat_breakfast' | 'sat_lunch' | 'sat_dinner' | 'sun_breakfast' | 'sun_lunch';
 
+// Helper function to extract t-shirt size from responses
+function getTShirtSize(responses: Record<string, any> | null | undefined): string | null {
+  if (!responses || typeof responses !== 'object') return null;
+  
+  // Try common field name variations
+  const commonKeys = [
+    'T-Shirt Size',
+    'T-shirt Size',
+    'T-Shirt size',
+    't_shirt_size',
+    'tshirt_size',
+    'TShirt Size',
+    'Tshirt Size',
+    'T SHIRT SIZE',
+    'T-SHIRT SIZE',
+    'T-shirt size',
+    'T-shirt',
+    'Shirt Size',
+    'shirt_size'
+  ];
+  
+  for (const key of commonKeys) {
+    if (responses[key]) {
+      return String(responses[key]).trim() || null;
+    }
+  }
+  
+  // Try to find any key that contains "shirt" (case-insensitive)
+  const key = Object.keys(responses).find(k => {
+    const lower = k.toLowerCase();
+    return lower.includes('shirt') || lower.includes('tshirt');
+  });
+  
+  if (key && responses[key]) {
+    return String(responses[key]).trim() || null;
+  }
+  
+  return null;
+}
+
 export const handler: Handler = async (event) => {
   try {
     if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
@@ -13,7 +53,7 @@ export const handler: Handler = async (event) => {
     // Get the applicant first to check existence
     const { data: applicant, error: fetchError } = await supabaseAdmin
       .from('applicants')
-      .select('id, checked_in_at, meal_checkins')
+      .select('id, checked_in_at, meal_checkins, responses, full_name')
       .eq('qr_token', token)
       .single();
 
@@ -41,7 +81,16 @@ export const handler: Handler = async (event) => {
         const mealCheckins = (applicant.meal_checkins as Record<string, string>) || {};
         
         if (mealCheckins[mealType]) {
-          return { statusCode: 409, body: JSON.stringify({ ok: false, reason: 'ALREADY_CHECKED_IN' }) };
+          const tShirtSize = getTShirtSize(applicant.responses);
+          return { 
+            statusCode: 409, 
+            body: JSON.stringify({ 
+              ok: false, 
+              reason: 'ALREADY_CHECKED_IN',
+              tShirtSize: tShirtSize || null,
+              name: applicant.full_name || null
+            }) 
+          };
         }
 
         const updatedMealCheckins = {
@@ -66,24 +115,76 @@ export const handler: Handler = async (event) => {
         const verifyCheckins = (verify?.meal_checkins as Record<string, string>) || {};
         if (verifyCheckins[mealType] !== timestamp) {
           // Someone else updated first
-          return { statusCode: 409, body: JSON.stringify({ ok: false, reason: 'ALREADY_CHECKED_IN' }) };
+          const tShirtSize = getTShirtSize(applicant.responses);
+          return { 
+            statusCode: 409, 
+            body: JSON.stringify({ 
+              ok: false, 
+              reason: 'ALREADY_CHECKED_IN',
+              tShirtSize: tShirtSize || null,
+              name: applicant.full_name || null
+            }) 
+          };
         }
       } else if (updateError) {
         // If update failed because key already exists (our function returns null)
         if (updateError.message.includes('already exists') || updateError.message.includes('duplicate')) {
-          return { statusCode: 409, body: JSON.stringify({ ok: false, reason: 'ALREADY_CHECKED_IN' }) };
+          const tShirtSize = getTShirtSize(applicant.responses);
+          return { 
+            statusCode: 409, 
+            body: JSON.stringify({ 
+              ok: false, 
+              reason: 'ALREADY_CHECKED_IN',
+              tShirtSize: tShirtSize || null,
+              name: applicant.full_name || null
+            }) 
+          };
         }
         throw updateError;
       } else if (!updated) {
         // RPC function returned null/false, meaning already checked in
-        return { statusCode: 409, body: JSON.stringify({ ok: false, reason: 'ALREADY_CHECKED_IN' }) };
+        const tShirtSize = getTShirtSize(applicant.responses);
+        return { 
+          statusCode: 409, 
+          body: JSON.stringify({ 
+            ok: false, 
+            reason: 'ALREADY_CHECKED_IN',
+            tShirtSize: tShirtSize || null,
+            name: applicant.full_name || null
+          }) 
+        };
       }
 
-      return { statusCode: 200, body: JSON.stringify({ ok: true, applicantId: applicant.id, mealType }) };
+      // Get t-shirt size from responses
+      const tShirtSize = getTShirtSize(applicant.responses);
+      
+      // Debug logging
+      console.log('Meal check-in - Applicant:', applicant.full_name, 'Responses keys:', Object.keys(applicant.responses || {}), 'T-shirt size:', tShirtSize);
+      
+      return { 
+        statusCode: 200, 
+        body: JSON.stringify({ 
+          ok: true, 
+          applicantId: applicant.id, 
+          mealType,
+          tShirtSize: tShirtSize || null,
+          name: applicant.full_name || null
+        }) 
+      };
     } else {
       // Regular check-in - use conditional update (atomic)
       if (applicant.checked_in_at) {
-        return { statusCode: 409, body: JSON.stringify({ ok: false, reason: 'ALREADY_CHECKED_IN' }) };
+        // Get t-shirt size from responses even for already checked in
+        const tShirtSize = getTShirtSize(applicant.responses);
+        return { 
+          statusCode: 409, 
+          body: JSON.stringify({ 
+            ok: false, 
+            reason: 'ALREADY_CHECKED_IN',
+            tShirtSize: tShirtSize || null,
+            name: applicant.full_name || null
+          }) 
+        };
       }
 
       // This update is atomic because it only succeeds if checked_in_at is still null
@@ -97,13 +198,36 @@ export const handler: Handler = async (event) => {
 
       // If no rows were updated, it means another request already set checked_in_at
       if (updateError || !updated) {
-        return { statusCode: 409, body: JSON.stringify({ ok: false, reason: 'ALREADY_CHECKED_IN' }) };
+        const tShirtSize = getTShirtSize(applicant.responses);
+        return { 
+          statusCode: 409, 
+          body: JSON.stringify({ 
+            ok: false, 
+            reason: 'ALREADY_CHECKED_IN',
+            tShirtSize: tShirtSize || null,
+            name: applicant.full_name || null
+          }) 
+        };
       }
 
-      return { statusCode: 200, body: JSON.stringify({ ok: true, applicantId: applicant.id }) };
+      // Get t-shirt size from responses
+      const tShirtSize = getTShirtSize(applicant.responses);
+      
+      // Debug logging
+      console.log('Regular check-in - Applicant:', applicant.full_name, 'Responses keys:', Object.keys(applicant.responses || {}), 'T-shirt size:', tShirtSize);
+      
+      return { 
+        statusCode: 200, 
+        body: JSON.stringify({ 
+          ok: true, 
+          applicantId: applicant.id,
+          tShirtSize: tShirtSize || null,
+          name: applicant.full_name || null
+        }) 
+      };
     }
   } catch (err: any) {
-    console.error(err);
+    console.error('Check-in error:', err);
     return { statusCode: 500, body: JSON.stringify({ error: err.message || 'Server error' }) };
   }
 };
